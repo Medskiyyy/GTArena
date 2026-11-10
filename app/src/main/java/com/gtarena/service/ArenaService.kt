@@ -42,7 +42,6 @@ class ArenaService : LifecycleService() {
     private lateinit var controller: OverlayController
     private val engineLock = Mutex()
     private val games = HashMap<String, String>()
-    private var lastGamesRefresh = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -131,12 +130,8 @@ class ArenaService : LifecycleService() {
     private suspend fun gameLabel(pkg: String): String? {
         games[pkg]?.let { return it }
         val extra = pkg in settings.extraGames.value
-        val now = System.currentTimeMillis()
-        if (now - lastGamesRefresh >= REFRESH_GAMES_MS) {
-            lastGamesRefresh = now
-            GameRepository(this).installedGames().forEach { games[it.pkg] = it.label }
-            games[pkg]?.let { return it }
-        }
+        GameRepository(this).installedGames().forEach { games[it.pkg] = it.label }
+        games[pkg]?.let { return it }
         if (!extra) return null
         return runCatching {
             packageManager.getApplicationInfo(pkg, 0).loadLabel(packageManager).toString()
@@ -182,7 +177,6 @@ class ArenaService : LifecycleService() {
         private const val CHANNEL_ID = "arena"
         private const val NOTIFICATION_ID = 1
         private const val HEARTBEAT_MS = 10_000L
-        private const val REFRESH_GAMES_MS = 60_000L
         private val IGNORED = setOf("com.android.systemui", "android")
 
         private val _session = MutableStateFlow<GameSession?>(null)
