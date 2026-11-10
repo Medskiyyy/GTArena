@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gtarena.ui.AppTab
 import com.gtarena.ui.icons.GTIcons
 import com.gtarena.ui.theme.Hairline
 import com.gtarena.ui.theme.NavBar
@@ -33,9 +34,9 @@ import com.gtarena.ui.theme.TextSecondary
 
 @Composable
 fun BottomNav(
+    selected: AppTab,
     accent: Color,
-    onOpenGames: () -> Unit,
-    onOpenSettings: () -> Unit,
+    onSelect: (AppTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -46,10 +47,10 @@ fun BottomNav(
     ) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(Hairline))
         Row(modifier = Modifier.fillMaxWidth().height(64.dp)) {
-            NavItem("Arena", GTIcons.Arena, active = true, accent = accent, onClick = {}, modifier = Modifier.weight(1f))
-            NavItem("Game", GTIcons.Games, active = false, accent = accent, onClick = onOpenGames, modifier = Modifier.weight(1f))
-            NavItem("Overlay", GTIcons.Overlay, active = false, accent = accent, onClick = {}, modifier = Modifier.weight(1f))
-            NavItem("Setelan", GTIcons.Settings, active = false, accent = accent, onClick = onOpenSettings, modifier = Modifier.weight(1f))
+            NavItem("Arena", GTIcons.Arena, selected == AppTab.ARENA, accent, { onSelect(AppTab.ARENA) }, Modifier.weight(1f))
+            NavItem("Game", GTIcons.Games, selected == AppTab.GAME, accent, { onSelect(AppTab.GAME) }, Modifier.weight(1f))
+            NavItem("Overlay", GTIcons.Overlay, selected == AppTab.OVERLAY, accent, { onSelect(AppTab.OVERLAY) }, Modifier.weight(1f))
+            NavItem("Setelan", GTIcons.Settings, selected == AppTab.SETELAN, accent, { onSelect(AppTab.SETELAN) }, Modifier.weight(1f))
         }
     }
 }

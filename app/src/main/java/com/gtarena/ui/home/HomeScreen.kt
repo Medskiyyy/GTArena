@@ -40,7 +40,6 @@ import com.gtarena.model.HomeState
 import com.gtarena.model.Profile
 import com.gtarena.model.label
 import com.gtarena.model.sampleHomeState
-import com.gtarena.ui.home.components.BottomNav
 import com.gtarena.ui.home.components.GameRow
 import com.gtarena.ui.home.components.ProfileSelector
 import com.gtarena.ui.home.components.TelemetryItem
@@ -108,17 +107,16 @@ fun HomeScreen(
             item {
                 GameHeader(count = state.games.size, onSeeAll = onSeeAllGames)
             }
-            itemsIndexed(state.games, key = { _, game -> game.pkg }) { index, game ->
+            itemsIndexed(state.games.take(3), key = { _, game -> game.pkg }) { index, game ->
                 GameRow(
                     game = game,
                     accent = accent,
                     primary = index == 0,
-                    showDivider = index < state.games.lastIndex,
+                    showDivider = index < minOf(state.games.size, 3) - 1,
                     onLaunch = { onLaunchGame(game) }
                 )
             }
         }
-        BottomNav(accent = accent, onOpenGames = onSeeAllGames, onOpenSettings = onOpenSettings)
     }
 }
 

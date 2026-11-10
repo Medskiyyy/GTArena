@@ -35,7 +35,7 @@ import com.gtarena.ui.theme.TextInactive
 import com.gtarena.ui.theme.TextSoft
 import com.gtarena.ui.theme.color
 
-private object CutBottomEndShape : Shape {
+internal object CutBottomEndShape : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
         val cut = with(density) { 12.dp.toPx() }
         return Outline.Generic(

@@ -5,29 +5,38 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import com.gtarena.model.GameEntry
-import com.gtarena.model.Profile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+data class AppItem(val pkg: String, val label: String)
 
 class GameRepository(private val context: Context) {
 
     suspend fun installedGames(): List<GameEntry> = withContext(Dispatchers.IO) {
         val pm = context.packageManager
-        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        pm.queryIntentActivities(launcher, PackageManager.MATCH_ALL)
-            .mapNotNull { it.activityInfo?.applicationInfo }
-            .distinctBy { it.packageName }
-            .filter { it.packageName != context.packageName && isUserOrUpdated(it) && isGame(it) }
+        val store = SettingsStore.get(context)
+        val extras = store.extraGames.value
+        launchableUserApps()
+            .filter { isGame(it) || it.packageName in extras }
             .map {
+                val cfg = store.gameConfig(it.packageName)
                 GameEntry(
                     pkg = it.packageName,
                     label = it.loadLabel(pm).toString(),
-                    profile = Profile.GAMING,
-                    refreshHz = 120,
-                    focus = false,
-                    bypassCharge = false
+                    profile = cfg.profile,
+                    refreshHz = cfg.refreshHz,
+                    focus = cfg.focus,
+                    bypassCharge = cfg.bypassCharge
                 )
             }
+            .sortedBy { it.label.lowercase() }
+    }
+
+    suspend fun otherApps(): List<AppItem> = withContext(Dispatchers.IO) {
+        val pm = context.packageManager
+        launchableUserApps()
+            .filter { !isGame(it) }
+            .map { AppItem(it.packageName, it.loadLabel(pm).toString()) }
             .sortedBy { it.label.lowercase() }
     }
 
@@ -40,6 +49,14 @@ class GameRepository(private val context: Context) {
         } catch (e: Exception) {
             false
         }
+    }
+
+    private fun launchableUserApps(): List<ApplicationInfo> {
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return context.packageManager.queryIntentActivities(launcher, PackageManager.MATCH_ALL)
+            .mapNotNull { it.activityInfo?.applicationInfo }
+            .distinctBy { it.packageName }
+            .filter { it.packageName != context.packageName && isUserOrUpdated(it) }
     }
 
     private fun isUserOrUpdated(info: ApplicationInfo): Boolean {
