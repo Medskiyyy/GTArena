@@ -96,8 +96,8 @@ class ArenaService : LifecycleService() {
         super.onDestroy()
     }
 
-    private suspend fun applyLocked(profile: Profile, refreshHz: Int?) {
-        engineLock.withLock { ProfileEngine.apply(profile, refreshHz) }
+    private suspend fun applyLocked(profile: Profile, refreshHz: Int?, bypassCharge: Boolean = false) {
+        engineLock.withLock { ProfileEngine.apply(profile, refreshHz, bypassCharge) }
     }
 
     private suspend fun handleForeground(pkg: String) {
@@ -109,7 +109,7 @@ class ArenaService : LifecycleService() {
         val label = gameLabel(pkg) ?: return
         val cfg = settings.gameConfig(pkg)
         _session.value = GameSession(pkg, label, cfg.profile)
-        applyLocked(cfg.profile, cfg.refreshHz)
+        applyLocked(cfg.profile, cfg.refreshHz, cfg.bypassCharge)
         if (cfg.focus) FocusMode.enable()
     }
 
@@ -123,7 +123,8 @@ class ArenaService : LifecycleService() {
         lifecycleScope.launch {
             val s = _session.value ?: return@launch
             _session.value = s.copy(profile = profile)
-            applyLocked(profile, settings.gameConfig(s.pkg).refreshHz)
+            val cfg = settings.gameConfig(s.pkg)
+            applyLocked(profile, cfg.refreshHz, cfg.bypassCharge)
         }
     }
 

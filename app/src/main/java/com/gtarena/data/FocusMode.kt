@@ -18,7 +18,7 @@ object FocusMode {
         prevZen = RootShell.run("settings get global zen_mode")?.trim()?.toIntOrNull()
         prevBrightnessMode = RootShell.run("settings get system screen_brightness_mode")?.trim()?.toIntOrNull()
         if (prevZen == 0) RootShell.run("cmd notification set_dnd priority")
-        RootShell.run("settings put system screen_brightness_mode 0")
+        if (prevBrightnessMode == 1) RootShell.run("settings put system screen_brightness_mode 0")
         RootShell.run("am kill-all")
         _enabled.value = true
     }
@@ -26,7 +26,7 @@ object FocusMode {
     suspend fun disable() = mutex.withLock {
         if (!_enabled.value) return@withLock
         if (prevZen == 0) RootShell.run("cmd notification set_dnd off")
-        prevBrightnessMode?.let { RootShell.run("settings put system screen_brightness_mode $it") }
+        if (prevBrightnessMode == 1) RootShell.run("settings put system screen_brightness_mode 1")
         prevZen = null
         prevBrightnessMode = null
         _enabled.value = false

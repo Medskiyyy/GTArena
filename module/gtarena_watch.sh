@@ -27,6 +27,7 @@ while true; do
             settings put system min_refresh_rate 60.0
             echo 0 > /proc/tp_report_rate_switch
             echo 0 > /proc/tp_transient_report_rate_switch
+            echo '0 0' > /proc/mtk_battery_cmd/current_cmd
             rm -f $H /data/adb/gtarena/profile
             echo "gtarena heartbeat stale -> seimbang uptime=$(cut -d' ' -f1 /proc/uptime)" >> $L
         fi

@@ -113,11 +113,10 @@ fun GameEditor(game: GameEntry, onBack: () -> Unit, modifier: Modifier = Modifie
         )
         SettingRow(
             title = "Bypass cas",
-            caption = "Belum tersedia. Perlu dites dulu pas ngecas.",
-            checked = false,
+            caption = "Pas dicolok, HP nyala dari charger dan baterai nggak diisi selama main",
+            checked = cfg.bypassCharge,
             accent = accent,
-            enabled = false,
-            onCheckedChange = {}
+            onCheckedChange = { save(cfg.copy(bypassCharge = it)) }
         )
     }
 }

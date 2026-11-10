@@ -36,9 +36,12 @@ object ProfileEngine {
     private fun touch(rate: Int) =
         "echo $rate > /proc/tp_report_rate_switch; echo 0 > /proc/tp_transient_report_rate_switch; "
 
-    private fun recipe(profile: Profile, refreshHz: Int?): String {
+    private fun bypass(on: Boolean) =
+        "echo '0 ${if (on) 1 else 0}' > /proc/mtk_battery_cmd/current_cmd; "
+
+    private fun recipe(profile: Profile, refreshHz: Int?, bypassCharge: Boolean): String {
         val hz = refreshHz?.takeIf { it == 60 || it == 90 || it == 120 }
-        return when (profile) {
+        return bypass(bypassCharge) + when (profile) {
             Profile.HEMAT ->
                 MIN_FLOORS + maxFreq(1450000, 1451000, 1482000) + EFFICIENT + upDelay(20, 30, 40) +
                     gpu(20) + refresh(hz ?: 60, hz ?: 60) + touch(0)
@@ -53,14 +56,14 @@ object ProfileEngine {
 
     private const val BEAT = "mkdir -p $DIR; date +%s > $DIR/heartbeat"
 
-    suspend fun apply(profile: Profile, refreshHz: Int? = null): Boolean =
-        RootShell.run(BEAT + "; " + recipe(profile, refreshHz) + "echo ${profile.name} > $DIR/profile") != null
+    suspend fun apply(profile: Profile, refreshHz: Int? = null, bypassCharge: Boolean = false): Boolean =
+        RootShell.run(BEAT + "; " + recipe(profile, refreshHz, bypassCharge) + "echo ${profile.name} > $DIR/profile") != null
 
     suspend fun heartbeat() {
         RootShell.run(BEAT)
     }
 
     suspend fun release() {
-        RootShell.run(recipe(Profile.SEIMBANG, null) + "rm -f $DIR/heartbeat $DIR/profile")
+        RootShell.run(recipe(Profile.SEIMBANG, null, false) + "rm -f $DIR/heartbeat $DIR/profile")
     }
 }
