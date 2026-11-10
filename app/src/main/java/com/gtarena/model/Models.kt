@@ -38,9 +38,9 @@ val Profile.label: String
 
 val Profile.description: String
     get() = when (this) {
-        Profile.HEMAT -> "Hemat baterai dan paling adem. Pengaman suhu tetap nyala."
+        Profile.HEMAT -> "Paling irit dan paling adem. Cocok buat chat, baca, dan nonton."
         Profile.SEIMBANG -> "Adem dan irit buat pemakaian harian. Pengaman suhu selalu nyala."
-        Profile.GAMING -> "Performa maksimal buat main game. Pengaman suhu tetap jalan."
+        Profile.GAMING -> "Tenaga penuh buat main. Pengaman suhu tetap nyala."
     }
 
 val sampleHomeState = HomeState(

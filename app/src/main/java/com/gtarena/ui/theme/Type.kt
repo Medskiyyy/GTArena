@@ -26,6 +26,11 @@ val Saira = FontFamily(
         R.font.saira,
         FontWeight.Bold,
         variationSettings = FontVariation.Settings(FontVariation.weight(700))
+    ),
+    Font(
+        R.font.saira,
+        FontWeight.ExtraBold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(800))
     )
 )
 

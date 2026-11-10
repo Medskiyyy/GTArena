@@ -1,7 +1,7 @@
 package com.gtarena.ui.home
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,25 +9,26 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -37,21 +38,24 @@ import androidx.compose.ui.unit.sp
 import com.gtarena.model.GameEntry
 import com.gtarena.model.HomeState
 import com.gtarena.model.Profile
+import com.gtarena.model.label
 import com.gtarena.model.sampleHomeState
+import com.gtarena.ui.home.components.BottomNav
 import com.gtarena.ui.home.components.GameRow
 import com.gtarena.ui.home.components.ProfileSelector
-import com.gtarena.ui.home.components.StatTile
+import com.gtarena.ui.home.components.TelemetryItem
+import com.gtarena.ui.home.components.TelemetryStrip
 import com.gtarena.ui.home.components.TempGauge
 import com.gtarena.ui.icons.GTIcons
 import com.gtarena.ui.theme.GTArenaTheme
 import com.gtarena.ui.theme.Ground
-import com.gtarena.ui.theme.Hairline
-import com.gtarena.ui.theme.Lime
-import com.gtarena.ui.theme.Panel
+import com.gtarena.ui.theme.ProfileGaming
+import com.gtarena.ui.theme.ProfileHemat
+import com.gtarena.ui.theme.ProfileSeimbang
 import com.gtarena.ui.theme.TextPrimary
 import com.gtarena.ui.theme.TextSecondary
-import com.gtarena.ui.theme.TextSoft
 import com.gtarena.ui.theme.Warn
+import com.gtarena.ui.theme.color
 import java.util.Locale
 
 private val IdLocale: Locale = Locale.forLanguageTag("id-ID")
@@ -65,48 +69,61 @@ fun HomeScreen(
     onSeeAllGames: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(
+    val accent = state.profile.color
+    Column(
         modifier = modifier
             .fillMaxSize()
             .background(Ground)
-            .windowInsetsPadding(WindowInsets.safeDrawing),
-        contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 16.dp)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
     ) {
-        item {
-            Header(
-                rootOk = state.rootOk,
-                onOpenSettings = onOpenSettings,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 16.dp)) {
+            item {
+                Header(onOpenSettings = onOpenSettings, modifier = Modifier.padding(bottom = 14.dp))
+            }
+            if (!state.rootOk) {
+                item {
+                    Text(
+                        text = "Root mati. Profil nggak bisa diterapin.",
+                        color = Warn,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 14.dp)
+                    )
+                }
+            }
+            item {
+                GaugeRow(state, accent, modifier = Modifier.padding(bottom = 14.dp))
+            }
+            item {
+                ProfileSelector(
+                    selected = state.profile,
+                    onSelected = onProfileSelected,
+                    modifier = Modifier.padding(bottom = 14.dp)
+                )
+            }
+            item {
+                TelemetryStrip(telemetryItems(state), modifier = Modifier.padding(bottom = 14.dp))
+            }
+            item {
+                GameHeader(count = state.games.size, onSeeAll = onSeeAllGames)
+            }
+            itemsIndexed(state.games, key = { _, game -> game.pkg }) { index, game ->
+                GameRow(
+                    game = game,
+                    accent = accent,
+                    primary = index == 0,
+                    showDivider = index < state.games.lastIndex,
+                    onLaunch = { onLaunchGame(game) }
+                )
+            }
         }
-        item {
-            GaugeRow(state, modifier = Modifier.padding(bottom = 16.dp))
-        }
-        item {
-            ProfileSelector(
-                selected = state.profile,
-                onSelected = onProfileSelected,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-        }
-        item {
-            StatRow(state, modifier = Modifier.padding(bottom = 10.dp))
-        }
-        item {
-            GameHeader(count = state.games.size, onSeeAll = onSeeAllGames)
-        }
-        items(state.games, key = { it.pkg }) { game ->
-            GameRow(
-                game = game,
-                onLaunch = { onLaunchGame(game) },
-                modifier = Modifier.padding(top = 6.dp)
-            )
-        }
+        BottomNav(accent = accent, onOpenGames = onSeeAllGames, onOpenSettings = onOpenSettings)
     }
 }
 
 @Composable
-private fun Header(rootOk: Boolean, onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
+private fun Header(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -114,59 +131,53 @@ private fun Header(rootOk: Boolean, onOpenSettings: () -> Unit, modifier: Modifi
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = "GT ARENA",
-            color = TextPrimary,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp
-        )
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            RootChip(rootOk)
-            val shape = RoundedCornerShape(14.dp)
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(shape)
-                    .background(Panel)
-                    .border(1.dp, Hairline, shape)
-                    .clickable(role = Role.Button, onClick = onOpenSettings),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = GTIcons.Settings,
-                    contentDescription = "Setelan",
-                    tint = TextPrimary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            Emblem()
+            Text(
+                text = "GT ARENA",
+                color = TextPrimary,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 2.sp
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clickable(role = Role.Button, onClick = onOpenSettings),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = GTIcons.Settings,
+                contentDescription = "Setelan",
+                tint = TextPrimary,
+                modifier = Modifier.size(22.dp)
+            )
         }
     }
 }
 
 @Composable
-private fun RootChip(rootOk: Boolean) {
-    Row(
-        modifier = Modifier
-            .border(1.dp, Hairline, CircleShape)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .background(if (rootOk) Lime else Warn, CircleShape)
-        )
-        Text(
-            text = if (rootOk) "Root aktif" else "Root mati",
-            color = TextSoft,
-            fontSize = 13.sp,
-            maxLines = 1
-        )
+private fun Emblem() {
+    Canvas(modifier = Modifier.size(width = 21.dp, height = 20.dp)) {
+        val barW = 5.dp.toPx()
+        val gap = 3.dp.toPx()
+        val h = 20.dp.toPx()
+        val shift = (h / 2f) * 0.3249197f
+        listOf(ProfileHemat, ProfileSeimbang, ProfileGaming).forEachIndexed { i, color ->
+            val x = i * (barW + gap)
+            val path = Path().apply {
+                moveTo(x + shift, 0f)
+                lineTo(x + barW + shift, 0f)
+                lineTo(x + barW - shift, h)
+                lineTo(x - shift, h)
+                close()
+            }
+            drawPath(path, color)
+        }
     }
 }
 
@@ -176,8 +187,9 @@ private fun SideStat(value: String, label: String, align: TextAlign) {
         Text(
             text = value,
             color = TextPrimary,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontSize = 26.sp,
+            lineHeight = 29.sp,
+            fontWeight = FontWeight.Bold,
             textAlign = align,
             maxLines = 1,
             modifier = Modifier.fillMaxWidth()
@@ -194,25 +206,25 @@ private fun SideStat(value: String, label: String, align: TextAlign) {
 }
 
 @Composable
-private fun GaugeRow(state: HomeState, modifier: Modifier = Modifier) {
+private fun GaugeRow(state: HomeState, accent: Color, modifier: Modifier = Modifier) {
     val stats = state.stats
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(196.dp),
+            .height(204.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(
-            modifier = Modifier.width(70.dp),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             SideStat("${stats.batteryTempC}°", "Baterai", TextAlign.Start)
             SideStat("${stats.batteryPct}%", "Daya", TextAlign.Start)
         }
-        TempGauge(tempC = stats.cpuTempC)
+        TempGauge(tempC = stats.cpuTempC, accent = accent, profileName = state.profile.label)
         Column(
-            modifier = Modifier.width(70.dp),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             SideStat("${stats.refreshHz}", "Hz layar", TextAlign.End)
@@ -221,31 +233,13 @@ private fun GaugeRow(state: HomeState, modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun StatRow(state: HomeState, modifier: Modifier = Modifier) {
+private fun telemetryItems(state: HomeState): List<TelemetryItem> {
     val stats = state.stats
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        StatTile(
-            label = "CPU besar",
-            value = String.format(IdLocale, "%.2f", stats.bigCoreGhz),
-            unit = "GHz",
-            modifier = Modifier.weight(1f)
-        )
-        StatTile(
-            label = "Beban GPU",
-            value = "${stats.gpuLoadPct}",
-            unit = "%",
-            modifier = Modifier.weight(1f)
-        )
-        StatTile(
-            label = "Cas",
-            value = if (stats.charging) "Ngecas" else "Lepas",
-            modifier = Modifier.weight(1f)
-        )
-    }
+    return listOf(
+        TelemetryItem("CPU besar", String.format(IdLocale, "%.2f", stats.bigCoreGhz), "GHz"),
+        TelemetryItem("Beban GPU", "${stats.gpuLoadPct}", "%"),
+        TelemetryItem("Cas", if (stats.charging) "Ngecas" else "Lepas")
+    )
 }
 
 @Composable
@@ -259,7 +253,7 @@ private fun GameHeader(count: Int, onSeeAll: () -> Unit) {
             text = "GAME",
             color = TextPrimary,
             fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             letterSpacing = 1.sp
         )
         Box(
@@ -268,7 +262,7 @@ private fun GameHeader(count: Int, onSeeAll: () -> Unit) {
                 .clickable(role = Role.Button, onClick = onSeeAll),
             contentAlignment = Alignment.CenterEnd
         ) {
-            Text(text = "Semua ($count)", color = Lime, fontSize = 14.sp)
+            Text(text = "Semua ($count)", color = TextPrimary, fontSize = 14.sp)
         }
     }
 }

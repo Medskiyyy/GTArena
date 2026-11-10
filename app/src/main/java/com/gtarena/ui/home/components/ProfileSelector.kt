@@ -1,38 +1,55 @@
 package com.gtarena.ui.home.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.CutCornerShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gtarena.model.Profile
 import com.gtarena.model.description
 import com.gtarena.model.label
-import com.gtarena.ui.theme.Hairline
-import com.gtarena.ui.theme.Lime
 import com.gtarena.ui.theme.OnLime
 import com.gtarena.ui.theme.Panel
-import com.gtarena.ui.theme.TextSecondary
+import com.gtarena.ui.theme.TextInactive
 import com.gtarena.ui.theme.TextSoft
+import com.gtarena.ui.theme.color
 
-private val InactiveShape = RoundedCornerShape(3.dp)
-private val ActiveShape = CutCornerShape(topStart = 10.dp, bottomEnd = 10.dp)
+private object CutBottomEndShape : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val cut = with(density) { 12.dp.toPx() }
+        return Outline.Generic(
+            Path().apply {
+                moveTo(0f, 0f)
+                lineTo(size.width, 0f)
+                lineTo(size.width, size.height - cut)
+                lineTo(size.width - cut, size.height)
+                lineTo(0f, size.height)
+                close()
+            }
+        )
+    }
+}
 
 @Composable
 fun ProfileSelector(
@@ -58,8 +75,9 @@ fun ProfileSelector(
         }
         Text(
             text = selected.description,
-            color = TextSecondary,
-            fontSize = 13.sp
+            color = TextSoft,
+            fontSize = 13.sp,
+            modifier = Modifier.heightIn(min = 38.dp)
         )
     }
 }
@@ -71,30 +89,31 @@ private fun ProfileButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = if (active) ActiveShape else InactiveShape
-    val base = modifier
-        .height(52.dp)
-        .clip(shape)
-    val styled = if (active) {
-        base.background(Lime)
-    } else {
-        base
-            .background(Panel)
-            .border(1.dp, Hairline, shape)
-    }
-    Box(
-        modifier = styled.selectable(
-            selected = active,
-            role = Role.RadioButton,
-            onClick = onClick
-        ),
-        contentAlignment = Alignment.Center
+    Column(
+        modifier = modifier
+            .height(54.dp)
+            .clip(if (active) CutBottomEndShape else RectangleShape)
+            .background(if (active) profile.color else Panel)
+            .selectable(selected = active, role = Role.RadioButton, onClick = onClick)
     ) {
-        Text(
-            text = profile.label,
-            color = if (active) OnLime else TextSoft,
-            fontSize = 16.sp,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.SemiBold
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .background(profile.color)
         )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = profile.label,
+                color = if (active) OnLime else TextInactive,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
