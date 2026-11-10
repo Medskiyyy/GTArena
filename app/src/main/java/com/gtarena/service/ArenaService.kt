@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-data class GameSession(val pkg: String, val label: String, val profile: Profile)
+data class GameSession(val pkg: String, val label: String, val profile: Profile, val bypass: Boolean = false)
 
 class ArenaService : LifecycleService() {
 
@@ -46,7 +46,7 @@ class ArenaService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         settings = SettingsStore.get(this)
-        controller = OverlayController(this) { switchProfile(it) }
+        controller = OverlayController(this, { switchProfile(it) }, { switchBypass(it) })
         _running.value = true
         createChannel()
         ServiceCompat.startForeground(
@@ -57,6 +57,7 @@ class ArenaService : LifecycleService() {
         )
 
         lifecycleScope.launch {
+            FocusMode.recover()
             while (true) {
                 ProfileEngine.heartbeat()
                 delay(HEARTBEAT_MS)
@@ -108,7 +109,7 @@ class ArenaService : LifecycleService() {
         if (!settings.autoApply.value) return
         val label = gameLabel(pkg) ?: return
         val cfg = settings.gameConfig(pkg)
-        _session.value = GameSession(pkg, label, cfg.profile)
+        _session.value = GameSession(pkg, label, cfg.profile, cfg.bypassCharge)
         applyLocked(cfg.profile, cfg.refreshHz, cfg.bypassCharge)
         if (cfg.focus) FocusMode.enable()
     }
@@ -123,8 +124,15 @@ class ArenaService : LifecycleService() {
         lifecycleScope.launch {
             val s = _session.value ?: return@launch
             _session.value = s.copy(profile = profile)
-            val cfg = settings.gameConfig(s.pkg)
-            applyLocked(profile, cfg.refreshHz, cfg.bypassCharge)
+            applyLocked(profile, settings.gameConfig(s.pkg).refreshHz, s.bypass)
+        }
+    }
+
+    private fun switchBypass(on: Boolean) {
+        lifecycleScope.launch {
+            val s = _session.value ?: return@launch
+            _session.value = s.copy(bypass = on)
+            applyLocked(s.profile, settings.gameConfig(s.pkg).refreshHz, on)
         }
     }
 

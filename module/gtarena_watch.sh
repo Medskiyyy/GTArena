@@ -28,6 +28,10 @@ while true; do
             echo 0 > /proc/tp_report_rate_switch
             echo 0 > /proc/tp_transient_report_rate_switch
             echo '0 0' > /proc/mtk_battery_cmd/current_cmd
+            if [ -f /data/adb/gtarena/dnd ]; then
+                cmd notification set_dnd off
+                rm -f /data/adb/gtarena/dnd
+            fi
             rm -f $H /data/adb/gtarena/profile
             echo "gtarena heartbeat stale -> seimbang uptime=$(cut -d' ' -f1 /proc/uptime)" >> $L
         fi

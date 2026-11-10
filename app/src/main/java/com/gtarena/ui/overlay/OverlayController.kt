@@ -61,7 +61,8 @@ private class OverlayOwner : SavedStateRegistryOwner, ViewModelStoreOwner {
 
 class OverlayController(
     private val context: Context,
-    private val onProfileChange: (Profile) -> Unit
+    private val onProfileChange: (Profile) -> Unit,
+    private val onBypassChange: (Boolean) -> Unit
 ) {
     private val ui = OverlayUiState()
     private var windowContext: Context? = null
@@ -77,6 +78,7 @@ class OverlayController(
     private val callbacks = object : ComponentCallbacks {
         override fun onConfigurationChanged(newConfig: Configuration) {
             updateScreen()
+            if (ui.expanded) setExpanded(true)
         }
 
         override fun onLowMemory() {}
@@ -156,7 +158,8 @@ class OverlayController(
                 OverlayRoot(
                     state = ui,
                     onExpandedChange = { setExpanded(it) },
-                    onProfileChange = onProfileChange
+                    onProfileChange = onProfileChange,
+                    onBypassChange = onBypassChange
                 )
             }
         }
@@ -217,10 +220,12 @@ class OverlayController(
             lp.gravity = Gravity.TOP or Gravity.START
             lp.x = dp(10)
             lp.y = dp(10)
+            lp.width = dp(panelWidthDp(ui.screenWidthDp, ui.screenHeightDp))
         } else {
             lp.gravity = Gravity.TOP or Gravity.END
             lp.x = pillX
             lp.y = pillY
+            lp.width = WindowManager.LayoutParams.WRAP_CONTENT
         }
         ui.expanded = expanded
         try {

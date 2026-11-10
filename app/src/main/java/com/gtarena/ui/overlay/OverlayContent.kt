@@ -89,11 +89,19 @@ private class CutShape(private val cutDp: Float) : Shape {
     }
 }
 
+internal fun isWidePanel(screenWidthDp: Int, screenHeightDp: Int): Boolean =
+    screenHeightDp < 440 && screenWidthDp >= 640
+
+internal fun panelWidthDp(screenWidthDp: Int, screenHeightDp: Int): Int =
+    if (isWidePanel(screenWidthDp, screenHeightDp)) min(600, screenWidthDp - 20)
+    else min(300, screenWidthDp - 20).coerceAtLeast(200)
+
 @Composable
 internal fun OverlayRoot(
     state: OverlayUiState,
     onExpandedChange: (Boolean) -> Unit,
-    onProfileChange: (Profile) -> Unit
+    onProfileChange: (Profile) -> Unit,
+    onBypassChange: (Boolean) -> Unit
 ) {
     val session = state.session ?: return
     val context = LocalContext.current
@@ -102,7 +110,11 @@ internal fun OverlayRoot(
     var fps by remember { mutableStateOf<Int?>(null) }
     val samples = remember { mutableStateListOf<Int>() }
     val focusOn by FocusMode.enabled.collectAsState()
+    val brightnessLocked by FocusMode.brightnessLocked.collectAsState()
 
+    LaunchedEffect(state.expanded) {
+        if (state.expanded) FocusMode.refreshBrightnessLock()
+    }
     LaunchedEffect(Unit) {
         TelemetryRepository(context).stats(1000L).collect { stats = it }
     }
@@ -122,10 +134,12 @@ internal fun OverlayRoot(
     val accent = session.profile.color
     ProvideTextStyle(TextStyle(fontFamily = Saira, color = TextPrimary)) {
         if (state.expanded) {
-            val width = min(300, state.screenWidthDp - 20).coerceAtLeast(200)
+            val wide = isWidePanel(state.screenWidthDp, state.screenHeightDp)
+            val width = panelWidthDp(state.screenWidthDp, state.screenHeightDp)
             val maxHeight = (state.screenHeightDp - 20).coerceAtLeast(160)
             OverlayPanel(
                 width = width,
+                wide = wide,
                 maxHeight = maxHeight,
                 accent = accent,
                 profile = session.profile,
@@ -133,9 +147,13 @@ internal fun OverlayRoot(
                 samples = samples,
                 stats = stats,
                 focusOn = focusOn,
+                bypassOn = session.bypass,
+                brightnessLocked = brightnessLocked,
                 onCollapse = { onExpandedChange(false) },
                 onProfile = onProfileChange,
                 onFocus = { scope.launch { if (focusOn) FocusMode.disable() else FocusMode.enable() } },
+                onBypass = { onBypassChange(!session.bypass) },
+                onBrightnessLock = { scope.launch { FocusMode.setBrightnessLocked(!brightnessLocked) } },
                 onCleanRam = { scope.launch { FocusMode.cleanRam() } }
             )
         } else {
@@ -182,6 +200,7 @@ internal fun OverlayPill(fps: Int?, cpuTemp: Int?, batteryPct: Int?, accent: Col
 @Composable
 private fun OverlayPanel(
     width: Int,
+    wide: Boolean,
     maxHeight: Int,
     accent: Color,
     profile: Profile,
@@ -189,9 +208,13 @@ private fun OverlayPanel(
     samples: List<Int>,
     stats: DeviceStats?,
     focusOn: Boolean,
+    bypassOn: Boolean,
+    brightnessLocked: Boolean,
     onCollapse: () -> Unit,
     onProfile: (Profile) -> Unit,
     onFocus: () -> Unit,
+    onBypass: () -> Unit,
+    onBrightnessLock: () -> Unit,
     onCleanRam: () -> Unit
 ) {
     val shape = RoundedCornerShape(20.dp)
@@ -242,57 +265,80 @@ private fun OverlayPanel(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Panel)
-                .border(1.dp, Hairline, RoundedCornerShape(12.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(
-                    text = fps?.toString() ?: "--",
-                    color = accent,
-                    fontSize = 44.sp,
-                    lineHeight = 46.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
-                )
-                Text(
-                    text = "FPS, layar ${stats?.refreshHz ?: "--"} Hz",
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    maxLines = 1
-                )
-            }
-            Sparkline(
-                samples = samples,
-                color = accent,
+        val fpsCard: @Composable () -> Unit = {
+            Row(
                 modifier = Modifier
-                    .padding(start = 12.dp)
-                    .weight(1f)
-                    .height(48.dp)
-            )
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Panel)
+                    .border(1.dp, Hairline, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = fps?.toString() ?: "--",
+                        color = accent,
+                        fontSize = 44.sp,
+                        lineHeight = 46.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = "FPS, layar ${stats?.refreshHz ?: "--"} Hz",
+                        color = TextSecondary,
+                        fontSize = 13.sp,
+                        maxLines = 1
+                    )
+                }
+                Sparkline(
+                    samples = samples,
+                    color = accent,
+                    modifier = Modifier
+                        .padding(start = 12.dp)
+                        .weight(1f)
+                        .height(48.dp)
+                )
+            }
         }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            StatTile("CPU", stats?.let { "${it.cpuTempC}°" } ?: "--", Modifier.weight(1f))
-            StatTile("GPU", stats?.let { "${it.gpuLoadPct}%" } ?: "--", Modifier.weight(1f))
-            StatTile("Baterai", stats?.let { "${it.batteryTempC}°" } ?: "--", Modifier.weight(1f))
+        val tiles: @Composable () -> Unit = {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                StatTile("CPU", stats?.let { "${it.cpuTempC}°" } ?: "--", Modifier.weight(1f))
+                StatTile("GPU", stats?.let { "${it.gpuLoadPct}%" } ?: "--", Modifier.weight(1f))
+                StatTile("Baterai", stats?.let { "${it.batteryTempC}°" } ?: "--", Modifier.weight(1f))
+            }
         }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Profile.values().forEach { p ->
-                OverlayProfileButton(p, p == profile, { onProfile(p) }, Modifier.weight(1f))
+        val controls: @Composable () -> Unit = {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Profile.values().forEach { p ->
+                    OverlayProfileButton(p, p == profile, { onProfile(p) }, Modifier.weight(1f))
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ToggleButton("Mode fokus", focusOn, accent, onFocus, Modifier.weight(1f))
+                ToggleButton("Bypass cas", bypassOn, accent, onBypass, Modifier.weight(1f))
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ToggleButton("Kunci terang", brightnessLocked, accent, onBrightnessLock, Modifier.weight(1f))
+                ActionButton("Bersihin RAM", onCleanRam, Modifier.weight(1f))
             }
         }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ToggleButton("Mode fokus", focusOn, accent, onFocus, Modifier.weight(1f))
-            ActionButton("Bersihin RAM", onCleanRam, Modifier.weight(1f))
+        if (wide) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    fpsCard()
+                    tiles()
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    controls()
+                }
+            }
+        } else {
+            fpsCard()
+            tiles()
+            controls()
         }
     }
 }
