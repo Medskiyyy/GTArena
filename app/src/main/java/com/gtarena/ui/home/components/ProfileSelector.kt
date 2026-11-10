@@ -29,6 +29,9 @@ import androidx.compose.ui.unit.sp
 import com.gtarena.model.Profile
 import com.gtarena.model.description
 import com.gtarena.model.label
+import com.gtarena.ui.intro.IntroTiming
+import com.gtarena.ui.intro.introDraw
+import com.gtarena.ui.intro.introEnter
 import com.gtarena.ui.theme.OnLime
 import com.gtarena.ui.theme.Panel
 import com.gtarena.ui.theme.TextInactive
@@ -64,12 +67,19 @@ fun ProfileSelector(
                 .selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Profile.values().forEach { profile ->
+            Profile.values().forEachIndexed { index, profile ->
                 ProfileButton(
                     profile = profile,
                     active = profile == selected,
+                    index = index,
                     onClick = { onSelected(profile) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .introEnter(
+                            IntroTiming.PROFILE_START + IntroTiming.PROFILE_STEP * index,
+                            IntroTiming.PROFILE_DUR,
+                            dy = 16.dp
+                        )
                 )
             }
         }
@@ -77,7 +87,9 @@ fun ProfileSelector(
             text = selected.description,
             color = TextSoft,
             fontSize = 13.sp,
-            modifier = Modifier.heightIn(min = 38.dp)
+            modifier = Modifier
+                .heightIn(min = 38.dp)
+                .introEnter(IntroTiming.DESC_START, IntroTiming.DESC_DUR)
         )
     }
 }
@@ -86,6 +98,7 @@ fun ProfileSelector(
 private fun ProfileButton(
     profile: Profile,
     active: Boolean,
+    index: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -100,6 +113,10 @@ private fun ProfileButton(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(4.dp)
+                .introDraw(
+                    IntroTiming.PROFILE_START + IntroTiming.PROFILE_STEP * index + IntroTiming.PROFILE_BAR_DELAY,
+                    IntroTiming.PROFILE_BAR_DUR
+                )
                 .background(profile.color)
         )
         Box(

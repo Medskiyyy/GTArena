@@ -29,6 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -46,6 +49,10 @@ import com.gtarena.ui.home.components.TelemetryItem
 import com.gtarena.ui.home.components.TelemetryStrip
 import com.gtarena.ui.home.components.TempGauge
 import com.gtarena.ui.icons.GTIcons
+import com.gtarena.ui.intro.IntroTiming
+import com.gtarena.ui.intro.LocalIntro
+import com.gtarena.ui.intro.Wordmark
+import com.gtarena.ui.intro.introEnter
 import com.gtarena.ui.theme.GTArenaTheme
 import com.gtarena.ui.theme.Ground
 import com.gtarena.ui.theme.ProfileGaming
@@ -105,7 +112,11 @@ fun HomeScreen(
                 TelemetryStrip(telemetryItems(state), modifier = Modifier.padding(bottom = 14.dp))
             }
             item {
-                GameHeader(count = state.games.size, onSeeAll = onSeeAllGames)
+                GameHeader(
+                    count = state.games.size,
+                    onSeeAll = onSeeAllGames,
+                    modifier = Modifier.introEnter(IntroTiming.GAME_HEADER_START, IntroTiming.GAME_DUR, dx = 16.dp)
+                )
             }
             itemsIndexed(state.games.take(3), key = { _, game -> game.pkg }) { index, game ->
                 GameRow(
@@ -113,7 +124,12 @@ fun HomeScreen(
                     accent = accent,
                     primary = index == 0,
                     showDivider = index < minOf(state.games.size, 3) - 1,
-                    onLaunch = { onLaunchGame(game) }
+                    onLaunch = { onLaunchGame(game) },
+                    modifier = Modifier.introEnter(
+                        IntroTiming.GAME_ROW_START + IntroTiming.GAME_STEP * index,
+                        IntroTiming.GAME_DUR,
+                        dx = 16.dp
+                    )
                 )
             }
         }
@@ -122,6 +138,7 @@ fun HomeScreen(
 
 @Composable
 private fun Header(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
+    val intro = LocalIntro.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -130,17 +147,14 @@ private fun Header(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(
+            modifier = Modifier
+                .onGloballyPositioned { intro.logoPos = it.positionInRoot() }
+                .graphicsLayer { alpha = if (intro.logoShown) 1f else 0f },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Emblem()
-            Text(
-                text = "GT ARENA",
-                color = TextPrimary,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 2.sp
-            )
+            Wordmark()
         }
         Box(
             modifier = Modifier
@@ -180,8 +194,12 @@ private fun Emblem() {
 }
 
 @Composable
-private fun SideStat(value: String, label: String, align: TextAlign) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+private fun SideStat(value: String, label: String, align: TextAlign, index: Int) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .introEnter(IntroTiming.STAT_START + IntroTiming.STAT_STEP * index, IntroTiming.STAT_DUR, dy = 12.dp)
+    ) {
         Text(
             text = value,
             color = TextPrimary,
@@ -217,16 +235,16 @@ private fun GaugeRow(state: HomeState, accent: Color, modifier: Modifier = Modif
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            SideStat("${stats.batteryTempC}°", "Baterai", TextAlign.Start)
-            SideStat("${stats.batteryPct}%", "Daya", TextAlign.Start)
+            SideStat("${stats.batteryTempC}°", "Baterai", TextAlign.Start, 0)
+            SideStat("${stats.batteryPct}%", "Daya", TextAlign.Start, 1)
         }
         TempGauge(tempC = stats.cpuTempC, accent = accent, profileName = state.profile.label)
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            SideStat("${stats.refreshHz}", "Hz layar", TextAlign.End)
-            SideStat(String.format(IdLocale, "%.1f", stats.ramUsedGb), "GB RAM", TextAlign.End)
+            SideStat("${stats.refreshHz}", "Hz layar", TextAlign.End, 2)
+            SideStat(String.format(IdLocale, "%.1f", stats.ramUsedGb), "GB RAM", TextAlign.End, 3)
         }
     }
 }
@@ -241,9 +259,9 @@ private fun telemetryItems(state: HomeState): List<TelemetryItem> {
 }
 
 @Composable
-private fun GameHeader(count: Int, onSeeAll: () -> Unit) {
+private fun GameHeader(count: Int, onSeeAll: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {

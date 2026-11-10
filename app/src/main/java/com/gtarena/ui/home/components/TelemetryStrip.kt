@@ -19,6 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gtarena.ui.intro.IntroTiming
+import com.gtarena.ui.intro.introDraw
+import com.gtarena.ui.intro.introEnter
 import com.gtarena.ui.theme.Hairline
 import com.gtarena.ui.theme.TextPrimary
 import com.gtarena.ui.theme.TextSecondary
@@ -28,8 +31,19 @@ class TelemetryItem(val label: String, val value: String, val unit: String? = nu
 @Composable
 fun TelemetryStrip(items: List<TelemetryItem>, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Hairline))
-        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .introDraw(IntroTiming.TELE_LINE_START, IntroTiming.TELE_LINE_DUR)
+                .background(Hairline)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .introEnter(IntroTiming.TELE_VALUES_START, IntroTiming.TELE_VALUES_DUR)
+        ) {
             items.forEachIndexed { index, item ->
                 if (index > 0) {
                     Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
@@ -58,6 +72,12 @@ fun TelemetryStrip(items: List<TelemetryItem>, modifier: Modifier = Modifier) {
                 }
             }
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Hairline))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .introDraw(IntroTiming.TELE_LINE_START + IntroTiming.TELE_LINE_STEP, IntroTiming.TELE_LINE_DUR)
+                .background(Hairline)
+        )
     }
 }

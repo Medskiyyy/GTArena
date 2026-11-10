@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gtarena.ui.AppTab
 import com.gtarena.ui.icons.GTIcons
+import com.gtarena.ui.intro.IntroTiming
+import com.gtarena.ui.intro.introFromBelow
 import com.gtarena.ui.theme.Hairline
 import com.gtarena.ui.theme.NavBar
 import com.gtarena.ui.theme.TextSecondary
@@ -41,6 +43,7 @@ fun BottomNav(
 ) {
     Column(
         modifier = modifier
+            .introFromBelow(IntroTiming.NAV_START, IntroTiming.TOTAL)
             .fillMaxWidth()
             .background(NavBar)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
