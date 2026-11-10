@@ -1,0 +1,16 @@
+package com.gtarena.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+val Ground = Color(0xFF0A0B0D)
+val Panel = Color(0xFF14161A)
+val Hairline = Color(0xFF262A31)
+val TextPrimary = Color(0xFFF2F4F7)
+val TextSecondary = Color(0xFF9AA3AF)
+val TextSoft = Color(0xFFB6BEC9)
+val Lime = Color(0xFFC8F031)
+val OnLime = Color(0xFF0A0B0D)
+val GaugeTrack = Color(0xFF1D2026)
+val Tile = Color(0xFF23272E)
+val Warn = Color(0xFFFFB020)
+val NavBar = Color(0xFF0F1114)
