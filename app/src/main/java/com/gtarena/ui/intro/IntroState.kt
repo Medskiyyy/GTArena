@@ -24,48 +24,42 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 object IntroTiming {
-    const val TOTAL = 1600f
-    const val BAR_STAGGER = 70f
-    const val BAR_DUR = 310f
-    const val WIPE_START = 450f
-    const val WIPE_END = 850f
-    const val LINE_RETRACT_END = 1000f
-    const val HANDOFF_START = 850f
-    const val HANDOFF_END = 1150f
-    const val RING_START = 900f
-    const val RING_END = 1200f
-    const val ARC_START = 950f
-    const val ARC_END = 1550f
-    const val STAT_START = 950f
-    const val STAT_STEP = 60f
-    const val STAT_DUR = 350f
-    const val PROFILE_START = 1000f
-    const val PROFILE_STEP = 50f
-    const val PROFILE_DUR = 350f
-    const val PROFILE_BAR_DELAY = 150f
-    const val PROFILE_BAR_DUR = 300f
-    const val DESC_START = 1150f
-    const val DESC_DUR = 300f
-    const val TELE_LINE_START = 1100f
-    const val TELE_LINE_STEP = 50f
-    const val TELE_LINE_DUR = 300f
-    const val TELE_VALUES_START = 1300f
-    const val TELE_VALUES_DUR = 250f
-    const val GAME_HEADER_START = 1100f
-    const val GAME_ROW_START = 1150f
-    const val GAME_STEP = 50f
-    const val GAME_DUR = 330f
-    const val NAV_START = 1250f
+    const val TOTAL = 3000f
+    const val BAR_STAGGER = 112f
+    const val BAR_DUR = 500f
+    const val WIPE_START = 720f
+    const val WIPE_END = 1360f
+    const val LINE_RETRACT_END = 2050f
+    const val HANDOFF_START = 1810f
+    const val HANDOFF_END = 2290f
+    const val RING_START = 1890f
+    const val RING_END = 2370f
+    const val ARC_START = 1970f
+    const val ARC_END = 2930f
+    const val STAT_START = 1970f
+    const val STAT_STEP = 96f
+    const val STAT_DUR = 560f
+    const val PROFILE_START = 2050f
+    const val PROFILE_STEP = 80f
+    const val PROFILE_DUR = 560f
+    const val PROFILE_BAR_DELAY = 240f
+    const val PROFILE_BAR_DUR = 480f
+    const val DESC_START = 2290f
+    const val DESC_DUR = 480f
+    const val TELE_LINE_START = 2210f
+    const val TELE_LINE_STEP = 80f
+    const val TELE_LINE_DUR = 480f
+    const val TELE_VALUES_START = 2530f
+    const val TELE_VALUES_DUR = 400f
+    const val GAME_HEADER_START = 2210f
+    const val GAME_ROW_START = 2290f
+    const val GAME_STEP = 80f
+    const val GAME_DUR = 530f
+    const val NAV_START = 2450f
 }
 
 object IntroGate {
-    var played = false
-
-    fun claim(onArena: Boolean): Boolean {
-        val go = !played && onArena && ValueAnimator.areAnimatorsEnabled()
-        played = true
-        return go
-    }
+    fun animationsOn(): Boolean = ValueAnimator.areAnimatorsEnabled()
 }
 
 private object RealSpeed : MotionDurationScale {
