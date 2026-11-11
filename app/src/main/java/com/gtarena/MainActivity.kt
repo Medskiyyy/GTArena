@@ -22,11 +22,17 @@ class MainActivity : ComponentActivity() {
             )
             ArenaService.start(this@MainActivity)
         }
+        val openSidebar = intent?.getStringExtra(EXTRA_SCREEN) == SCREEN_SIDEBAR
         setContent {
             GTArenaTheme {
-                AppRoot()
+                AppRoot(openSidebar = openSidebar)
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_SCREEN = "screen"
+        const val SCREEN_SIDEBAR = "sidebar"
     }
 
     override fun onStart() {

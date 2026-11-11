@@ -57,4 +57,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun otherApps(): List<AppItem> = gameRepo.otherApps()
+
+    suspend fun allApps(): List<AppItem> = gameRepo.allApps()
 }

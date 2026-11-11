@@ -33,6 +33,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.gtarena.data.FpsReader
 import com.gtarena.data.GameTools
 import com.gtarena.data.SettingsStore
+import com.gtarena.data.Sidebar
 import com.gtarena.model.Profile
 import com.gtarena.service.GameSession
 import com.gtarena.ui.theme.GTArenaTheme
@@ -56,7 +57,7 @@ internal class OverlayUiState {
     var sessionStart by mutableLongStateOf(0L)
 }
 
-private class OverlayOwner : SavedStateRegistryOwner, ViewModelStoreOwner {
+internal class OverlayOwner : SavedStateRegistryOwner, ViewModelStoreOwner {
     private val registry = LifecycleRegistry(this)
     private val controller = SavedStateRegistryController.create(this)
     override val viewModelStore = ViewModelStore()
@@ -75,7 +76,54 @@ private class OverlayOwner : SavedStateRegistryOwner, ViewModelStoreOwner {
     }
 }
 
-private class OverlayWindow(val view: ComposeView, val owner: OverlayOwner, val params: WindowManager.LayoutParams)
+internal class OverlayWindow(val view: ComposeView, val owner: OverlayOwner, val params: WindowManager.LayoutParams)
+
+internal fun overlayContext(context: Context): Context {
+    val dm = context.getSystemService(DisplayManager::class.java)
+    return context.createDisplayContext(dm.getDisplay(Display.DEFAULT_DISPLAY))
+        .createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
+}
+
+internal fun overlayParams(extraFlags: Int = 0): WindowManager.LayoutParams {
+    val lp = WindowManager.LayoutParams(
+        WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+            extraFlags,
+        PixelFormat.TRANSLUCENT
+    )
+    lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+    return lp
+}
+
+internal fun addOverlayWindow(
+    wctx: Context,
+    manager: WindowManager,
+    lp: WindowManager.LayoutParams,
+    content: @Composable () -> Unit
+): OverlayWindow {
+    val owner = OverlayOwner()
+    val view = ComposeView(wctx)
+    view.setViewTreeLifecycleOwner(owner)
+    view.setViewTreeSavedStateRegistryOwner(owner)
+    view.setViewTreeViewModelStoreOwner(owner)
+    view.setContent { GTArenaTheme(content) }
+    manager.addView(view, lp)
+    return OverlayWindow(view, owner, lp)
+}
+
+internal fun removeOverlayWindow(manager: WindowManager?, window: OverlayWindow?) {
+    window ?: return
+    try {
+        manager?.removeView(window.view)
+    } catch (_: Exception) {
+    }
+    window.owner.destroy()
+}
 
 class OverlayController(
     private val context: Context,
@@ -109,7 +157,11 @@ class OverlayController(
         onThermal = { onThermalChange(it) },
         onBubble = { settings.setFpsBubble(it) },
         onCrosshair = { setCrosshair(it) },
-        onScreenshot = { screenshot() }
+        onScreenshot = { screenshot() },
+        onOpenApp = { pkg ->
+            setExpanded(false)
+            scope?.launch { Sidebar.openFloating(context, pkg) }
+        }
     )
 
     private val callbacks = object : ComponentCallbacks {
@@ -160,11 +212,7 @@ class OverlayController(
         ui.session = null
     }
 
-    private fun overlayContext(): Context {
-        val dm = context.getSystemService(DisplayManager::class.java)
-        return context.createDisplayContext(dm.getDisplay(Display.DEFAULT_DISPLAY))
-            .createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
-    }
+    private fun overlayContext(): Context = overlayContext(context)
 
     fun splash(pkg: String, profile: Profile) {
         val now = SystemClock.elapsedRealtime()
@@ -254,46 +302,16 @@ class OverlayController(
         }
     }
 
-    private fun baseParams(extraFlags: Int = 0): WindowManager.LayoutParams {
-        val lp = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                extraFlags,
-            PixelFormat.TRANSLUCENT
-        )
-        lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-        return lp
-    }
+    private fun baseParams(extraFlags: Int = 0): WindowManager.LayoutParams = overlayParams(extraFlags)
 
     private fun addWindow(
         lp: WindowManager.LayoutParams,
         wctx: Context = windowContext!!,
         manager: WindowManager = wm!!,
         content: @Composable () -> Unit
-    ): OverlayWindow {
-        val owner = OverlayOwner()
-        val view = ComposeView(wctx)
-        view.setViewTreeLifecycleOwner(owner)
-        view.setViewTreeSavedStateRegistryOwner(owner)
-        view.setViewTreeViewModelStoreOwner(owner)
-        view.setContent { GTArenaTheme(content) }
-        manager.addView(view, lp)
-        return OverlayWindow(view, owner, lp)
-    }
+    ): OverlayWindow = addOverlayWindow(wctx, manager, lp, content)
 
-    private fun remove(window: OverlayWindow?) {
-        window ?: return
-        try {
-            wm?.removeView(window.view)
-        } catch (_: Exception) {
-        }
-        window.owner.destroy()
-    }
+    private fun remove(window: OverlayWindow?) = removeOverlayWindow(wm, window)
 
     private fun setBubble(on: Boolean) {
         ui.bubble = on

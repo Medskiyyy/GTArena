@@ -212,6 +212,13 @@ object GTIcons {
         }
     }
 
+    val Plus: ImageVector by lazy {
+        strokeIcon("Plus") {
+            moveTo(12f, 5f); verticalLineTo(19f)
+            moveTo(5f, 12f); horizontalLineTo(19f)
+        }
+    }
+
     private fun strokeIcon(name: String, block: PathBuilder.() -> Unit): ImageVector =
         ImageVector.Builder(
             name = name,

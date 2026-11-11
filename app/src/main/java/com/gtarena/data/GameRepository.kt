@@ -40,6 +40,13 @@ class GameRepository(private val context: Context) {
             .sortedBy { it.label.lowercase() }
     }
 
+    suspend fun allApps(): List<AppItem> = withContext(Dispatchers.IO) {
+        val pm = context.packageManager
+        launchableUserApps()
+            .map { AppItem(it.packageName, it.loadLabel(pm).toString()) }
+            .sortedBy { it.label.lowercase() }
+    }
+
     fun launch(pkg: String): Boolean {
         val intent = context.packageManager.getLaunchIntentForPackage(pkg) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

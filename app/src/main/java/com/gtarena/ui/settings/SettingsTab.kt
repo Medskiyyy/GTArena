@@ -3,6 +3,10 @@ package com.gtarena.ui.settings
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.Role
+import com.gtarena.ui.theme.TextSecondary
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,12 +41,14 @@ import com.gtarena.ui.theme.mechaPanel
 private val PanelShape = ChamferShape(14.dp)
 
 @Composable
-fun SettingsTab(accent: Color, modifier: Modifier = Modifier) {
+fun SettingsTab(accent: Color, onEditSidebar: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val store = remember { SettingsStore.get(context) }
     val autoApply by store.autoApply.collectAsStateWithLifecycle()
     val overlay by store.overlayEnabled.collectAsStateWithLifecycle()
     val introSound by store.introSound.collectAsStateWithLifecycle()
+    val sidebar by store.sidebarEnabled.collectAsStateWithLifecycle()
+    val sidebarApps by store.sidebarApps.collectAsStateWithLifecycle()
     val running by ArenaService.running.collectAsStateWithLifecycle()
     val root by produceState<Boolean?>(initialValue = null) { value = RootShell.isAvailable() }
     val version = remember { appVersion(context) }
@@ -110,6 +116,31 @@ fun SettingsTab(accent: Color, modifier: Modifier = Modifier) {
                 onCheckedChange = store::setOverlayEnabled,
                 showDivider = false
             )
+        }
+        Label(text = "Sidebar", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .mechaPanel(PanelShape)
+                .padding(horizontal = 16.dp)
+        ) {
+            SettingRow(
+                title = "Sidebar GT Arena",
+                caption = "Gantiin garis sidebar ROM. Ketuk garis di tepi buat buka app melayang, tahan ikon buat pintasan.",
+                checked = sidebar,
+                accent = accent,
+                onCheckedChange = store::setSidebarEnabled
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .clickable(role = Role.Button, onClick = onEditSidebar)
+                    .padding(vertical = 12.dp)
+            ) {
+                Text(text = "Atur isi sidebar", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(text = "${sidebarApps.size} app, juga muncul di panel game", color = TextSecondary, fontSize = 13.sp)
+            }
         }
         Label(text = "Tampilan", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
         Column(

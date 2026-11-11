@@ -58,11 +58,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gtarena.data.FocusMode
 import com.gtarena.data.GameTools
+import com.gtarena.data.SettingsStore
 import com.gtarena.data.TelemetryRepository
 import com.gtarena.model.DeviceStats
 import com.gtarena.model.Profile
 import com.gtarena.model.label
 import com.gtarena.ui.icons.GTIcons
+import com.gtarena.ui.theme.AppIcon
 import com.gtarena.ui.theme.BevelBrush
 import com.gtarena.ui.theme.ChamferShape
 import com.gtarena.ui.theme.Label
@@ -83,7 +85,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal const val PANEL_WIDTH_DP = 324
-internal const val PANEL_HEIGHT_DP = 310
+internal const val PANEL_HEIGHT_DP = 350
 internal const val HANDLE_WIDTH_DP = 14
 internal const val HANDLE_HEIGHT_DP = 56
 
@@ -91,6 +93,7 @@ private val PanelShape = ChamferShape(16.dp)
 private val TileShape = ChamferShape(9.dp)
 private val BubbleShape = ChamferShape(6.dp)
 private val TickShape = SlantShape(2.dp)
+internal val AppShape = ChamferShape(7.dp)
 private val RefreshSteps = listOf(60, 90, 120)
 private val ThermalGlyphs = listOf("48°", "56°", "LEPAS")
 
@@ -101,8 +104,30 @@ internal class OverlayActions(
     val onThermal: (Int) -> Unit,
     val onBubble: (Boolean) -> Unit,
     val onCrosshair: (Boolean) -> Unit,
-    val onScreenshot: () -> Unit
+    val onScreenshot: () -> Unit,
+    val onOpenApp: (String) -> Unit
 )
+
+@Composable
+private fun AppStrip(apps: List<String>, onOpen: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        apps.forEach { pkg ->
+            AppIcon(
+                pkg = pkg,
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(AppShape)
+                    .clickable(role = Role.Button, onClickLabel = "Buka melayang") { onOpen(pkg) }
+            )
+        }
+    }
+}
 
 @Composable
 internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
@@ -119,6 +144,7 @@ internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
     val focusOn by FocusMode.enabled.collectAsState()
     val brightnessLocked by FocusMode.brightnessLocked.collectAsState()
     val recording by GameTools.recording.collectAsState()
+    val apps by remember { SettingsStore.get(context).sidebarApps }.collectAsState()
 
     LaunchedEffect(Unit) {
         FocusMode.refreshBrightnessLock()
@@ -138,6 +164,7 @@ internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             PanelHeader(label = session.label, start = state.sessionStart, accent = accent)
+            if (apps.isNotEmpty()) AppStrip(apps = apps, onOpen = actions.onOpenApp)
             FpsRow(fps = state.fps, hz = stats?.refreshHz, samples = state.samples, accent = session.profile.textOnDark)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 val s = stats
@@ -333,14 +360,14 @@ private fun FpsRow(fps: Int?, hz: Int?, samples: List<Int>, accent: Color) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(54.dp),
+            .height(48.dp),
         verticalAlignment = Alignment.Bottom
     ) {
         Text(
             text = fps?.toString() ?: "--",
             color = accent,
-            fontSize = 44.sp,
-            lineHeight = 54.sp,
+            fontSize = 40.sp,
+            lineHeight = 48.sp,
             fontWeight = FontWeight.ExtraBold,
             maxLines = 1
         )
@@ -536,7 +563,7 @@ private fun Tile(
     Column(
         modifier = Modifier
             .width(86.dp)
-            .height(60.dp)
+            .height(54.dp)
             .clip(TileShape)
             .background(PanelBrush)
             .drawBehind {

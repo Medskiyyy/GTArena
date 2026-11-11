@@ -42,6 +42,31 @@ class SettingsStore private constructor(context: Context) {
     private val _gameConfigs = MutableStateFlow(loadGameConfigs())
     val gameConfigs: StateFlow<Map<String, GameConfig>> = _gameConfigs
 
+    private val _sidebarEnabled = MutableStateFlow(prefs.getBoolean(KEY_SIDEBAR, true))
+    val sidebarEnabled: StateFlow<Boolean> = _sidebarEnabled
+
+    private val _sidebarApps = MutableStateFlow(
+        prefs.getString(KEY_SIDEBAR_APPS, null)?.split(",")?.filter { it.isNotEmpty() }.orEmpty()
+    )
+    val sidebarApps: StateFlow<List<String>> = _sidebarApps
+
+    val sidebarImported: Boolean get() = prefs.contains(KEY_SIDEBAR_APPS)
+
+    fun setSidebarEnabled(on: Boolean) {
+        _sidebarEnabled.value = on
+        prefs.edit().putBoolean(KEY_SIDEBAR, on).apply()
+    }
+
+    fun setSidebarApps(pkgs: List<String>) {
+        _sidebarApps.value = pkgs
+        prefs.edit().putString(KEY_SIDEBAR_APPS, pkgs.joinToString(",")).apply()
+    }
+
+    fun setSidebarApp(pkg: String, included: Boolean) {
+        val now = _sidebarApps.value
+        setSidebarApps(if (included) (now - pkg) + pkg else now - pkg)
+    }
+
     fun setProfile(p: Profile) {
         _profile.value = p
         prefs.edit().putString(KEY_PROFILE, p.name).apply()
@@ -115,6 +140,8 @@ class SettingsStore private constructor(context: Context) {
         private const val KEY_EXTRA = "extra_games"
         private const val KEY_INTRO_SOUND = "intro_sound"
         private const val GAME_PREFIX = "game:"
+        private const val KEY_SIDEBAR = "sidebar_enabled"
+        private const val KEY_SIDEBAR_APPS = "sidebar_apps"
 
         @Volatile
         private var instance: SettingsStore? = null

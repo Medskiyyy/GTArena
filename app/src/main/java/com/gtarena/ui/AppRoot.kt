@@ -41,6 +41,7 @@ import com.gtarena.ui.intro.IntroState
 import com.gtarena.ui.intro.LocalIntro
 import com.gtarena.ui.overlay.OverlayTab
 import com.gtarena.ui.settings.SettingsTab
+import com.gtarena.ui.settings.SidebarAppsScreen
 import com.gtarena.ui.theme.Ground
 import com.gtarena.ui.theme.color
 import kotlinx.coroutines.launch
@@ -48,9 +49,10 @@ import kotlinx.coroutines.launch
 private const val REPLAY_AFTER_MS = 60_000L
 
 @Composable
-fun AppRoot(vm: HomeViewModel = viewModel()) {
+fun AppRoot(openSidebar: Boolean = false, vm: HomeViewModel = viewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
-    var tab by rememberSaveable { mutableStateOf(AppTab.ARENA) }
+    var tab by rememberSaveable { mutableStateOf(if (openSidebar) AppTab.SETELAN else AppTab.ARENA) }
+    var sidebarEdit by rememberSaveable { mutableStateOf(openSidebar) }
     var editingPkg by rememberSaveable { mutableStateOf<String?>(null) }
     var adding by rememberSaveable { mutableStateOf(false) }
     val accent = state.profile.color
@@ -97,6 +99,7 @@ fun AppRoot(vm: HomeViewModel = viewModel()) {
         when {
             tab == AppTab.GAME && adding -> adding = false
             tab == AppTab.GAME && editingPkg != null -> editingPkg = null
+            tab == AppTab.SETELAN && sidebarEdit -> sidebarEdit = false
             else -> tab = AppTab.ARENA
         }
     }
@@ -142,7 +145,11 @@ fun AppRoot(vm: HomeViewModel = viewModel()) {
                             loadOtherApps = vm::otherApps
                         )
                         AppTab.OVERLAY -> Box(Modifier.tabInsets()) { OverlayTab() }
-                        AppTab.SETELAN -> SettingsTab(accent = accent)
+                        AppTab.SETELAN -> if (sidebarEdit) {
+                            SidebarAppsScreen(accent = accent, loadApps = vm::allApps, onBack = { sidebarEdit = false })
+                        } else {
+                            SettingsTab(accent = accent, onEditSidebar = { sidebarEdit = true })
+                        }
                     }
                 }
                 BottomNav(
@@ -153,6 +160,7 @@ fun AppRoot(vm: HomeViewModel = viewModel()) {
                             editingPkg = null
                             adding = false
                         }
+                        if (it == AppTab.SETELAN) sidebarEdit = false
                         tab = it
                     }
                 )

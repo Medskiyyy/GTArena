@@ -24,7 +24,9 @@ import com.gtarena.data.ProfileEngine
 import com.gtarena.data.SettingsStore
 import com.gtarena.model.Profile
 import com.gtarena.model.label
+import com.gtarena.data.Sidebar
 import com.gtarena.ui.overlay.OverlayController
+import com.gtarena.ui.overlay.SidebarController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,6 +52,7 @@ class ArenaService : LifecycleService() {
 
     private lateinit var settings: SettingsStore
     private lateinit var controller: OverlayController
+    private lateinit var sidebar: SidebarController
     private val engineLock = Mutex()
     private val sessionLock = Mutex()
     private val games = HashMap<String, String>()
@@ -61,6 +64,7 @@ class ArenaService : LifecycleService() {
         super.onCreate()
         settings = SettingsStore.get(this)
         controller = OverlayController(this, { switchProfile(it) }, { switchBypass(it) }, { switchRefresh(it) }, { switchThermal(it) })
+        sidebar = SidebarController(this)
         _running.value = true
         controller.warmUp()
         createChannel()
@@ -91,6 +95,18 @@ class ArenaService : LifecycleService() {
         lifecycleScope.launch {
             combine(_session, settings.overlayEnabled) { s, e -> s to e }.collect { (s, enabled) ->
                 if (s != null && enabled) controller.show(s) else controller.hide()
+            }
+        }
+        lifecycleScope.launch {
+            if (!settings.sidebarImported) {
+                val rom = Sidebar.importRomApps().filter { packageManager.getLaunchIntentForPackage(it) != null }
+                if (rom.isNotEmpty()) settings.setSidebarApps(rom)
+            }
+            settings.sidebarEnabled.collect { Sidebar.setRomSideline(!it) }
+        }
+        lifecycleScope.launch {
+            combine(_session, settings.sidebarEnabled) { s, e -> s == null && e }.collect { show ->
+                if (show) sidebar.show() else sidebar.hide()
             }
         }
         lifecycleScope.launch {
@@ -134,11 +150,13 @@ class ArenaService : LifecycleService() {
 
     override fun onDestroy() {
         controller.hide()
+        sidebar.hide()
         _session.value = null
         _running.value = false
         CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {
             FocusMode.disable()
             ProfileEngine.release()
+            Sidebar.setRomSideline(true)
         }
         super.onDestroy()
     }

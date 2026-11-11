@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.flow
 
 object ForegroundAppWatcher {
     private const val CMD =
-        "dumpsys activity activities | grep -m1 -E \"topResumedActivity|ResumedActivity\""
+        "dumpsys activity activities | awk '/^Display #0/{f=1} f&&/topResumedActivity/{print;exit}'"
     private val RECORD = Regex("""ActivityRecord\{[0-9a-fA-F]+ u\d+ ([A-Za-z0-9_.]+)/""")
 
     suspend fun current(): String? = RootShell.run(CMD)?.let { parsePackage(it) }
