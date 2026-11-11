@@ -9,7 +9,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.Process
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -27,17 +26,14 @@ import com.gtarena.model.label
 import com.gtarena.ui.overlay.OverlayController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 
 data class GameSession(
     val pkg: String,
@@ -101,28 +97,6 @@ class ArenaService : LifecycleService() {
                 ProfileEngine.writeGames(pkgs)
             }
         }
-        lifecycleScope.launch {
-            combine(_session, _uiVisible) { s, ui -> s == null && !ui }.collectLatest { idle ->
-                if (idle) {
-                    delay(IDLE_GRACE_MS)
-                    shutdown()
-                }
-            }
-        }
-    }
-
-    private suspend fun shutdown() = withContext(NonCancellable) {
-        controller.hide()
-        FocusMode.disable()
-        engineLock.withLock { ProfileEngine.release() }
-        if (_uiVisible.value || _session.value != null) {
-            if (_session.value == null) applyLocked(settings.profile.value, null)
-            return@withContext
-        }
-        closeUi()
-        ServiceCompat.stopForeground(this@ArenaService, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        stopSelf()
-        Process.killProcess(Process.myPid())
     }
 
     private fun closeUi() {
@@ -262,7 +236,6 @@ class ArenaService : LifecycleService() {
         private const val EXTRA_GAME = "game"
         private const val NOTIFICATION_ID = 1
         private const val HEARTBEAT_MS = 10_000L
-        private const val IDLE_GRACE_MS = 8_000L
         private val THERMAL_GUARD_C = intArrayOf(0, 46, 50)
         private val IGNORED = setOf("com.android.systemui", "android")
 

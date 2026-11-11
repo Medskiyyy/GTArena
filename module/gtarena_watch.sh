@@ -7,24 +7,28 @@ L=/data/local/tmp/hwfix.log
 NL='
 '
 tick=0
+last=
 
 while true; do
-    if [ -s $D/games ] && [ -z "$(pidof com.gtarena)" ]; then
-        list="$NL$(cat $D/games)$NL"
-        for p in $(cat /dev/cpuset/top-app/cgroup.procs); do
+    top=
+    if [ -s $D/games ]; then
+        list="$NL$(<$D/games)$NL"
+        for p in $(</dev/cpuset/top-app/cgroup.procs); do
             c=
             IFS= read -r -d '' c < /proc/$p/cmdline 2>/dev/null
             [ -n "$c" ] || continue
             case "$list" in
                 *"$NL$c$NL"*)
-                    cmd activity start-foreground-service -n com.gtarena/.service.ArenaService --es game "$c" >/dev/null 2>&1
-                    echo "gtarena wake for $c uptime=$(cut -d' ' -f1 /proc/uptime)" >> $L
-                    sleep 12
+                    top=$c
                     break
                     ;;
             esac
         done
     fi
+    if [ -n "$top" ] && { [ "$top" != "$last" ] || [ -z "$(pidof com.gtarena)" ]; }; then
+        cmd activity start-foreground-service -n com.gtarena/.service.ArenaService --es game "$top" >/dev/null 2>&1
+    fi
+    last=$top
     tick=$((tick + 1))
     if [ $tick -ge 40 ]; then
         tick=0
