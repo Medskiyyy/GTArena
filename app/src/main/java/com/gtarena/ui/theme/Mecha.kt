@@ -235,7 +235,33 @@ fun SlantTab(
     }
 }
 
-private val iconCache = ConcurrentHashMap<String, ImageBitmap>()
+class IconData(val bitmap: ImageBitmap, val tint: Color)
+
+private val iconCache = ConcurrentHashMap<String, IconData>()
+private val NeutralTint = Color(0xFF3A3D44)
+
+private fun vividTint(bitmap: Bitmap): Color {
+    val small = Bitmap.createScaledBitmap(bitmap, 16, 16, true)
+    val hsv = FloatArray(3)
+    var r = 0f
+    var g = 0f
+    var b = 0f
+    var total = 0f
+    for (y in 0 until 16) {
+        for (x in 0 until 16) {
+            val p = small.getPixel(x, y)
+            if (android.graphics.Color.alpha(p) < 128) continue
+            android.graphics.Color.colorToHSV(p, hsv)
+            val w = hsv[1] * hsv[1] * hsv[2]
+            r += android.graphics.Color.red(p) * w
+            g += android.graphics.Color.green(p) * w
+            b += android.graphics.Color.blue(p) * w
+            total += w
+        }
+    }
+    if (total < 4f) return NeutralTint
+    return Color(r / total / 255f, g / total / 255f, b / total / 255f)
+}
 
 private fun fullBleed(drawable: Drawable, size: Int): Bitmap {
     if (drawable !is AdaptiveIconDrawable) return drawable.toBitmap(size, size)
@@ -251,18 +277,24 @@ private fun fullBleed(drawable: Drawable, size: Int): Bitmap {
 }
 
 @Composable
-fun AppIcon(pkg: String, modifier: Modifier = Modifier) {
+fun rememberAppIcon(pkg: String): IconData? {
     val context = LocalContext.current
     val icon by produceState(iconCache[pkg], pkg) {
         if (value == null) {
             value = withContext(Dispatchers.IO) {
                 runCatching {
-                    fullBleed(context.packageManager.getApplicationIcon(pkg), 192).asImageBitmap()
+                    val bitmap = fullBleed(context.packageManager.getApplicationIcon(pkg), 192)
+                    IconData(bitmap.asImageBitmap(), vividTint(bitmap))
                 }.getOrNull()
             }?.also { iconCache[pkg] = it }
         }
     }
-    val bitmap = icon
+    return icon
+}
+
+@Composable
+fun AppIcon(pkg: String, modifier: Modifier = Modifier) {
+    val bitmap = rememberAppIcon(pkg)?.bitmap
     if (bitmap != null) {
         Image(bitmap = bitmap, contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop)
     } else {

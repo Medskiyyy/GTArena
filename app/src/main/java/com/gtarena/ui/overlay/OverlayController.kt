@@ -261,9 +261,12 @@ class OverlayController(
 
     private fun screenshot() {
         setExpanded(false)
+        val views = listOfNotNull(main, bubble, crosshair).map { it.view }
+        views.forEach { it.visibility = View.INVISIBLE }
         scope?.launch {
             delay(400L)
             GameTools.screenshot(context)
+            views.forEach { it.visibility = View.VISIBLE }
         }
     }
 
@@ -308,8 +311,9 @@ class OverlayController(
 
     private fun loadBubblePos() {
         val saved = settings.bubblePos(isLandscape())
-        bubbleX = saved?.first ?: dp(20)
-        bubbleY = saved?.second ?: dp(6)
+        val width = wm?.currentWindowMetrics?.bounds?.width() ?: 0
+        bubbleX = saved?.first ?: (width * 0.36f).toInt()
+        bubbleY = saved?.second ?: dp(2)
     }
 
     private fun clampBubble() {

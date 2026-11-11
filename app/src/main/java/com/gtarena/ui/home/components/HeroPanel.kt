@@ -79,9 +79,9 @@ fun HeroPanel(state: HomeState, modifier: Modifier = Modifier) {
                     color = state.profile.textOnDark,
                     fontFamily = SairaWide,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 28.sp,
+                    fontSize = 24.sp,
                     lineHeight = 34.sp,
-                    letterSpacing = 1.sp,
+                    letterSpacing = 0.5.sp,
                     maxLines = 1
                 )
                 Text(

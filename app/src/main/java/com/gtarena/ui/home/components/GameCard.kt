@@ -14,9 +14,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
@@ -36,30 +36,36 @@ import com.gtarena.ui.theme.OnLime
 import com.gtarena.ui.theme.PanelLo
 import com.gtarena.ui.theme.TextPrimary
 import com.gtarena.ui.theme.color
+import com.gtarena.ui.theme.rememberAppIcon
 import com.gtarena.ui.theme.textOnDark
 
 private val CardShape = ChamferShape(16.dp)
 private val IconShape = ChamferShape(9.dp)
 private val PlayShape = ChamferShape(10.dp, topStart = false, bottomEnd = false, bottomStart = true)
-private val Scrim = Brush.verticalGradient(listOf(Color(0x66060607), Ground.copy(alpha = 0.94f)))
+private val Scrim = Brush.verticalGradient(listOf(Color.Transparent, Ground.copy(alpha = 0.9f)))
 
 @Composable
 fun GameCard(game: GameEntry, onLaunch: () -> Unit, modifier: Modifier = Modifier) {
+    val tint = rememberAppIcon(game.pkg)?.tint
     Box(
         modifier = modifier
             .size(width = 132.dp, height = 168.dp)
             .clip(CardShape)
             .background(PanelLo)
+            .drawBehind {
+                if (tint != null) {
+                    drawRect(
+                        Brush.radialGradient(
+                            listOf(tint.copy(alpha = 0.8f), Color.Transparent),
+                            center = Offset(size.width * 0.3f, size.height * 0.18f),
+                            radius = size.height
+                        )
+                    )
+                }
+            }
             .border(1.dp, BevelBrush, CardShape)
             .clickable(role = Role.Button, onClickLabel = "Main ${game.label}", onClick = onLaunch)
     ) {
-        AppIcon(
-            pkg = game.pkg,
-            modifier = Modifier
-                .fillMaxSize()
-                .scale(1.7f)
-                .blur(22.dp)
-        )
         Box(Modifier.fillMaxSize().background(Scrim))
         Box(
             modifier = Modifier
