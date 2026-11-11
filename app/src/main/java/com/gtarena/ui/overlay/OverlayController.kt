@@ -126,6 +126,7 @@ class OverlayController(
         if (!Settings.canDrawOverlays(context)) return
         try {
             attach()
+            setCrosshair(session.crosshair)
         } catch (e: Exception) {
             hide()
         }

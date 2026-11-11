@@ -1,5 +1,7 @@
 package com.gtarena.data
 
+import java.io.File
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -51,7 +53,16 @@ object FocusMode {
         RootShell.run("if [ -f $DND_MARKER ]; then cmd notification set_dnd off; rm -f $DND_MARKER; fi")
     }
 
-    suspend fun cleanRam() {
+    suspend fun cleanRam(): Int {
+        val before = memAvailableKb()
         RootShell.run("am kill-all")
+        delay(700L)
+        return ((memAvailableKb() - before) / 1024L).toInt().coerceAtLeast(0)
     }
+
+    private fun memAvailableKb(): Long = runCatching {
+        File("/proc/meminfo").useLines { lines ->
+            lines.first { it.startsWith("MemAvailable:") }.filter(Char::isDigit).toLong()
+        }
+    }.getOrDefault(0L)
 }

@@ -10,7 +10,8 @@ data class GameConfig(
     val profile: Profile = Profile.GAMING,
     val refreshHz: Int = 120,
     val focus: Boolean = false,
-    val bypassCharge: Boolean = false
+    val bypassCharge: Boolean = false,
+    val crosshair: Boolean = false
 )
 
 class SettingsStore private constructor(context: Context) {
@@ -30,6 +31,9 @@ class SettingsStore private constructor(context: Context) {
 
     private val _fpsBubble = MutableStateFlow(prefs.getBoolean(KEY_BUBBLE, true))
     val fpsBubble: StateFlow<Boolean> = _fpsBubble
+
+    private val _introSound = MutableStateFlow(prefs.getBoolean(KEY_INTRO_SOUND, true))
+    val introSound: StateFlow<Boolean> = _introSound
 
     private val _extraGames = MutableStateFlow(prefs.getStringSet(KEY_EXTRA, emptySet())!!.toSet())
     val extraGames: StateFlow<Set<String>> = _extraGames
@@ -57,6 +61,11 @@ class SettingsStore private constructor(context: Context) {
         prefs.edit().putBoolean(KEY_BUBBLE, on).apply()
     }
 
+    fun setIntroSound(on: Boolean) {
+        _introSound.value = on
+        prefs.edit().putBoolean(KEY_INTRO_SOUND, on).apply()
+    }
+
     fun bubblePos(landscape: Boolean): Pair<Int, Int>? {
         val raw = prefs.getString(bubbleKey(landscape), null)?.split(",") ?: return null
         val x = raw.getOrNull(0)?.toIntOrNull() ?: return null
@@ -81,17 +90,17 @@ class SettingsStore private constructor(context: Context) {
     fun setGameConfig(pkg: String, cfg: GameConfig) {
         _gameConfigs.value = _gameConfigs.value + (pkg to cfg)
         prefs.edit()
-            .putString(GAME_PREFIX + pkg, "${cfg.profile.name}|${cfg.refreshHz}|${cfg.focus}|${cfg.bypassCharge}")
+            .putString(GAME_PREFIX + pkg, "${cfg.profile.name}|${cfg.refreshHz}|${cfg.focus}|${cfg.bypassCharge}|${cfg.crosshair}")
             .apply()
     }
 
     private fun loadGameConfigs(): Map<String, GameConfig> =
         prefs.all.filterKeys { it.startsWith(GAME_PREFIX) }.mapNotNull { (key, value) ->
             val parts = (value as? String)?.split("|") ?: return@mapNotNull null
-            if (parts.size != 4) return@mapNotNull null
+            if (parts.size < 4) return@mapNotNull null
             val profile = runCatching { Profile.valueOf(parts[0]) }.getOrNull() ?: return@mapNotNull null
             val hz = parts[1].toIntOrNull() ?: return@mapNotNull null
-            key.removePrefix(GAME_PREFIX) to GameConfig(profile, hz, parts[2].toBoolean(), parts[3].toBoolean())
+            key.removePrefix(GAME_PREFIX) to GameConfig(profile, hz, parts[2].toBoolean(), parts[3].toBoolean(), parts.getOrNull(4).toBoolean())
         }.toMap()
 
     companion object {
@@ -100,6 +109,7 @@ class SettingsStore private constructor(context: Context) {
         private const val KEY_OVERLAY = "overlay_enabled"
         private const val KEY_BUBBLE = "fps_bubble"
         private const val KEY_EXTRA = "extra_games"
+        private const val KEY_INTRO_SOUND = "intro_sound"
         private const val GAME_PREFIX = "game:"
 
         @Volatile

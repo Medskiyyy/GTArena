@@ -5,6 +5,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -41,11 +44,12 @@ import com.gtarena.ui.theme.textOnDark
 
 private val CardShape = ChamferShape(16.dp)
 private val IconShape = ChamferShape(9.dp)
+private val EditShape = ChamferShape(5.dp)
 private val PlayShape = ChamferShape(10.dp, topStart = false, bottomEnd = false, bottomStart = true)
 private val Scrim = Brush.verticalGradient(listOf(Color.Transparent, Ground.copy(alpha = 0.9f)))
 
 @Composable
-fun GameCard(game: GameEntry, onLaunch: () -> Unit, modifier: Modifier = Modifier) {
+fun GameCard(game: GameEntry, onLaunch: () -> Unit, onEdit: () -> Unit, modifier: Modifier = Modifier) {
     val tint = rememberAppIcon(game.pkg)?.tint
     Box(
         modifier = modifier
@@ -103,12 +107,31 @@ fun GameCard(game: GameEntry, onLaunch: () -> Unit, modifier: Modifier = Modifie
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Label(
-                text = "${game.profile.label} · ${game.refreshHz} Hz",
-                color = game.profile.textOnDark,
-                fontSize = 10.sp,
-                modifier = Modifier.padding(top = 3.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 5.dp)
+                    .height(30.dp)
+                    .clip(EditShape)
+                    .background(Ground.copy(alpha = 0.6f))
+                    .border(1.dp, BevelBrush, EditShape)
+                    .clickable(role = Role.Button, onClickLabel = "Atur ${game.label}", onClick = onEdit)
+                    .padding(horizontal = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Label(
+                    text = "${game.profile.label} · ${game.refreshHz}",
+                    color = game.profile.textOnDark,
+                    fontSize = 10.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = GTIcons.Settings,
+                    contentDescription = null,
+                    tint = TextPrimary,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
         }
     }
 }

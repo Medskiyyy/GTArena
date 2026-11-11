@@ -84,6 +84,23 @@ fun GameRow(
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
+            if (onClick != null) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(TileShape)
+                        .border(1.dp, BevelBrush, TileShape)
+                        .clickable(role = Role.Button, onClick = onClick),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = GTIcons.Settings,
+                        contentDescription = "Atur ${game.label}",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
             Box(
                 modifier = Modifier
                     .size(44.dp)

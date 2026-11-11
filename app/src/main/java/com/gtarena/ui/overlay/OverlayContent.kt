@@ -1,6 +1,9 @@
 package com.gtarena.ui.overlay
 
 import android.os.SystemClock
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -75,6 +78,7 @@ import com.gtarena.ui.theme.color
 import com.gtarena.ui.theme.mechaPanel
 import com.gtarena.ui.theme.textOnDark
 import kotlin.math.max
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -200,7 +204,7 @@ internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
                     },
                     icon = GTIcons.Record
                 )
-                Tile("Bersihin RAM", false, accent, { scope.launch { FocusMode.cleanRam() } }, icon = GTIcons.Chip)
+                RamTile(accent)
             }
         }
     }
@@ -468,13 +472,58 @@ private fun BrightnessRow(percent: Float?, accent: Color, onChange: (Float) -> U
 }
 
 @Composable
+private fun RamTile(accent: Color) {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var freedMb by remember { mutableStateOf<Int?>(null) }
+    val fill = remember { Animatable(0f) }
+    val freed = freedMb
+    Tile(
+        label = when {
+            busy -> "Bersihin"
+            freed == null -> "Bersihin RAM"
+            freed > 0 -> "MB lega"
+            else -> "Udah lega"
+        },
+        on = busy || freed != null,
+        accent = accent,
+        onClick = {
+            if (!busy && freedMb == null) scope.launch {
+                busy = true
+                val sweep = launch {
+                    while (true) {
+                        fill.snapTo(0f)
+                        fill.animateTo(1f, tween(1400, easing = LinearEasing))
+                    }
+                }
+                val started = SystemClock.elapsedRealtime()
+                val result = FocusMode.cleanRam()
+                delay((1200L - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(0L))
+                sweep.cancelAndJoin()
+                fill.snapTo(1f)
+                busy = false
+                freedMb = result
+                launch { fill.animateTo(0f, tween(5000, easing = LinearEasing)) }
+                delay(2600L)
+                fill.snapTo(0f)
+                freedMb = null
+            }
+        },
+        icon = if (freed == null) GTIcons.Chip else null,
+        glyph = freed?.let { if (it > 0) "+$it" else "OK" },
+        fill = { fill.value }
+    )
+}
+
+@Composable
 private fun Tile(
     label: String,
     on: Boolean,
     accent: Color,
     onClick: () -> Unit,
     icon: ImageVector? = null,
-    glyph: String? = null
+    glyph: String? = null,
+    fill: (() -> Float)? = null
 ) {
     val tint = if (on) accent else TextSoft
     Column(
@@ -489,6 +538,8 @@ private fun Tile(
                     val bar = 2.dp.toPx()
                     drawRect(accent, topLeft = Offset(0f, size.height - bar), size = Size(size.width, bar))
                 }
+                val f = fill?.invoke() ?: 0f
+                if (f > 0f) drawRect(accent.copy(alpha = 0.35f), size = Size(size.width * f, size.height))
             }
             .then(
                 if (on) Modifier.border(1.dp, accent.copy(alpha = 0.7f), TileShape)

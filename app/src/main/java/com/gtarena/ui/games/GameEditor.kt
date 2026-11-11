@@ -121,6 +121,13 @@ fun GameEditor(game: GameEntry, onBack: () -> Unit, modifier: Modifier = Modifie
             accent = accent,
             onCheckedChange = { save(cfg.copy(bypassCharge = it)) }
         )
+        SettingRow(
+            title = "Crosshair",
+            caption = "Titik bidik di tengah layar langsung nyala pas game dibuka",
+            checked = cfg.crosshair,
+            accent = accent,
+            onCheckedChange = { save(cfg.copy(crosshair = it)) }
+        )
     }
 }
 

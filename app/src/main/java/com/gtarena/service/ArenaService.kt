@@ -1,5 +1,6 @@
 package com.gtarena.service
 
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Process
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -25,21 +27,25 @@ import com.gtarena.model.label
 import com.gtarena.ui.overlay.OverlayController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 data class GameSession(
     val pkg: String,
     val label: String,
     val profile: Profile,
     val bypass: Boolean = false,
-    val refreshHz: Int = 120
+    val refreshHz: Int = 120,
+    val crosshair: Boolean = false
 )
 
 class ArenaService : LifecycleService() {
@@ -85,6 +91,38 @@ class ArenaService : LifecycleService() {
         lifecycleScope.launch {
             ForegroundAppWatcher.foregroundPackage().collect { handleForeground(it) }
         }
+        lifecycleScope.launch {
+            combine(settings.extraGames, settings.autoApply) { _, auto -> auto }.collect { auto ->
+                val pkgs = if (auto) GameRepository(this@ArenaService).installedGames().map { it.pkg } else emptyList()
+                ProfileEngine.writeGames(pkgs)
+            }
+        }
+        lifecycleScope.launch {
+            combine(_session, _uiVisible) { s, ui -> s == null && !ui }.collectLatest { idle ->
+                if (idle) {
+                    delay(IDLE_GRACE_MS)
+                    shutdown()
+                }
+            }
+        }
+    }
+
+    private suspend fun shutdown() = withContext(NonCancellable) {
+        controller.hide()
+        FocusMode.disable()
+        engineLock.withLock { ProfileEngine.release() }
+        if (_uiVisible.value || _session.value != null) {
+            if (_session.value == null) applyLocked(settings.profile.value, null)
+            return@withContext
+        }
+        closeUi()
+        ServiceCompat.stopForeground(this@ArenaService, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        Process.killProcess(Process.myPid())
+    }
+
+    private fun closeUi() {
+        getSystemService(ActivityManager::class.java).appTasks.forEach { it.finishAndRemoveTask() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -115,7 +153,8 @@ class ArenaService : LifecycleService() {
         if (!settings.autoApply.value) return
         val label = gameLabel(pkg) ?: return
         val cfg = settings.gameConfig(pkg)
-        _session.value = GameSession(pkg, label, cfg.profile, cfg.bypassCharge, cfg.refreshHz)
+        _session.value = GameSession(pkg, label, cfg.profile, cfg.bypassCharge, cfg.refreshHz, cfg.crosshair)
+        closeUi()
         applyLocked(cfg.profile, cfg.refreshHz, cfg.bypassCharge)
         if (cfg.focus) FocusMode.enable()
     }
@@ -180,7 +219,7 @@ class ArenaService : LifecycleService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_arena)
             .setContentTitle("GT Arena aktif")
             .setContentText(text)
             .setContentIntent(open)
@@ -200,10 +239,17 @@ class ArenaService : LifecycleService() {
         private const val CHANNEL_ID = "arena"
         private const val NOTIFICATION_ID = 1
         private const val HEARTBEAT_MS = 10_000L
+        private const val IDLE_GRACE_MS = 8_000L
         private val IGNORED = setOf("com.android.systemui", "android")
 
         private val _session = MutableStateFlow<GameSession?>(null)
         val session: StateFlow<GameSession?> = _session
+
+        private val _uiVisible = MutableStateFlow(false)
+
+        fun setUiVisible(visible: Boolean) {
+            _uiVisible.value = visible
+        }
 
         private val _running = MutableStateFlow(false)
         val running: StateFlow<Boolean> = _running

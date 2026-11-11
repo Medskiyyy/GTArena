@@ -63,6 +63,11 @@ object ProfileEngine {
         RootShell.run(BEAT)
     }
 
+    suspend fun writeGames(pkgs: List<String>) {
+        val body = if (pkgs.isEmpty()) ": > $DIR/games" else "printf '%s\\n' ${pkgs.joinToString(" ")} > $DIR/games"
+        RootShell.run("mkdir -p $DIR; $body")
+    }
+
     suspend fun release() {
         RootShell.run(recipe(Profile.SEIMBANG, null, false) + "rm -f $DIR/heartbeat $DIR/profile")
     }

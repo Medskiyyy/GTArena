@@ -28,4 +28,14 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        ArenaService.setUiVisible(true)
+    }
+
+    override fun onStop() {
+        ArenaService.setUiVisible(false)
+        super.onStop()
+    }
 }
