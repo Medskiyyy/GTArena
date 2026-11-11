@@ -97,6 +97,7 @@ internal class OverlayActions(
     val onProfile: (Profile) -> Unit,
     val onBypass: (Boolean) -> Unit,
     val onRefresh: (Int) -> Unit,
+    val onThermal: (Boolean) -> Unit,
     val onBubble: (Boolean) -> Unit,
     val onCrosshair: (Boolean) -> Unit,
     val onScreenshot: () -> Unit
@@ -189,6 +190,7 @@ internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
                     icon = GTIcons.Focus
                 )
                 Tile("Bypass cas", session.bypass, accent, { actions.onBypass(!session.bypass) }, icon = GTIcons.Bypass)
+                Tile("Batas panas", session.thermal, accent, { actions.onThermal(!session.thermal) }, glyph = if (session.thermal) "56°" else "48°")
                 Tile(
                     "Kunci terang", brightnessLocked, accent,
                     { scope.launch { FocusMode.setBrightnessLocked(!brightnessLocked) } },

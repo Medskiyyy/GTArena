@@ -45,7 +45,8 @@ data class GameSession(
     val profile: Profile,
     val bypass: Boolean = false,
     val refreshHz: Int = 120,
-    val crosshair: Boolean = false
+    val crosshair: Boolean = false,
+    val thermal: Boolean = false
 )
 
 class ArenaService : LifecycleService() {
@@ -58,7 +59,7 @@ class ArenaService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         settings = SettingsStore.get(this)
-        controller = OverlayController(this, { switchProfile(it) }, { switchBypass(it) }, { switchRefresh(it) })
+        controller = OverlayController(this, { switchProfile(it) }, { switchBypass(it) }, { switchRefresh(it) }, { switchThermal(it) })
         _running.value = true
         createChannel()
         ServiceCompat.startForeground(
@@ -72,6 +73,9 @@ class ArenaService : LifecycleService() {
             FocusMode.recover()
             while (true) {
                 ProfileEngine.heartbeat()
+                if (_session.value?.thermal == true && (ProfileEngine.batteryTempC() ?: 0) >= THERMAL_GUARD_C) {
+                    switchThermal(false)
+                }
                 delay(HEARTBEAT_MS)
             }
         }
@@ -141,8 +145,13 @@ class ArenaService : LifecycleService() {
         super.onDestroy()
     }
 
-    private suspend fun applyLocked(profile: Profile, refreshHz: Int?, bypassCharge: Boolean = false) {
-        engineLock.withLock { ProfileEngine.apply(profile, refreshHz, bypassCharge) }
+    private suspend fun applyLocked(
+        profile: Profile,
+        refreshHz: Int?,
+        bypassCharge: Boolean = false,
+        thermalRelax: Boolean = false
+    ) {
+        engineLock.withLock { ProfileEngine.apply(profile, refreshHz, bypassCharge, thermalRelax) }
     }
 
     private suspend fun handleForeground(pkg: String) {
@@ -153,9 +162,9 @@ class ArenaService : LifecycleService() {
         if (!settings.autoApply.value) return
         val label = gameLabel(pkg) ?: return
         val cfg = settings.gameConfig(pkg)
-        _session.value = GameSession(pkg, label, cfg.profile, cfg.bypassCharge, cfg.refreshHz, cfg.crosshair)
+        _session.value = GameSession(pkg, label, cfg.profile, cfg.bypassCharge, cfg.refreshHz, cfg.crosshair, cfg.thermalRelax)
         closeUi()
-        applyLocked(cfg.profile, cfg.refreshHz, cfg.bypassCharge)
+        applyLocked(cfg.profile, cfg.refreshHz, cfg.bypassCharge, cfg.thermalRelax)
         if (cfg.focus) FocusMode.enable()
     }
 
@@ -169,7 +178,7 @@ class ArenaService : LifecycleService() {
         lifecycleScope.launch {
             val s = _session.value ?: return@launch
             _session.value = s.copy(profile = profile)
-            applyLocked(profile, s.refreshHz, s.bypass)
+            applyLocked(profile, s.refreshHz, s.bypass, s.thermal)
         }
     }
 
@@ -177,7 +186,7 @@ class ArenaService : LifecycleService() {
         lifecycleScope.launch {
             val s = _session.value ?: return@launch
             _session.value = s.copy(bypass = on)
-            applyLocked(s.profile, s.refreshHz, on)
+            applyLocked(s.profile, s.refreshHz, on, s.thermal)
         }
     }
 
@@ -185,7 +194,15 @@ class ArenaService : LifecycleService() {
         lifecycleScope.launch {
             val s = _session.value ?: return@launch
             _session.value = s.copy(refreshHz = hz)
-            applyLocked(s.profile, hz, s.bypass)
+            applyLocked(s.profile, hz, s.bypass, s.thermal)
+        }
+    }
+
+    private fun switchThermal(on: Boolean) {
+        lifecycleScope.launch {
+            val s = _session.value ?: return@launch
+            _session.value = s.copy(thermal = on)
+            applyLocked(s.profile, s.refreshHz, s.bypass, on)
         }
     }
 
@@ -240,6 +257,7 @@ class ArenaService : LifecycleService() {
         private const val NOTIFICATION_ID = 1
         private const val HEARTBEAT_MS = 10_000L
         private const val IDLE_GRACE_MS = 8_000L
+        private const val THERMAL_GUARD_C = 46
         private val IGNORED = setOf("com.android.systemui", "android")
 
         private val _session = MutableStateFlow<GameSession?>(null)

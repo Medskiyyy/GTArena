@@ -26,7 +26,7 @@ while true; do
         done
     fi
     tick=$((tick + 1))
-    if [ $tick -ge 7 ]; then
+    if [ $tick -ge 20 ]; then
         tick=0
         if [ -f $H ]; then
             hb=$(cat $H 2>/dev/null)
@@ -51,6 +51,10 @@ while true; do
                 echo 0 > /proc/tp_report_rate_switch
                 echo 0 > /proc/tp_transient_report_rate_switch
                 echo '0 0' > /proc/mtk_battery_cmd/current_cmd
+                if [ -f $D/thermal ]; then
+                    /vendor/bin/thermal_manager /vendor/etc/.tp/thermal.conf
+                    rm -f $D/thermal
+                fi
                 if [ -f $D/dnd ]; then
                     cmd notification set_dnd off
                     rm -f $D/dnd
@@ -60,5 +64,5 @@ while true; do
             fi
         fi
     fi
-    sleep 3
+    sleep 1
 done

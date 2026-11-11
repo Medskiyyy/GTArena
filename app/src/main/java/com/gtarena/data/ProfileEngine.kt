@@ -39,9 +39,18 @@ object ProfileEngine {
     private fun bypass(on: Boolean) =
         "echo '0 ${if (on) 1 else 0}' > /proc/mtk_battery_cmd/current_cmd; "
 
-    private fun recipe(profile: Profile, refreshHz: Int?, bypassCharge: Boolean): String {
+    private const val TM = "/vendor/bin/thermal_manager /vendor/etc/.tp"
+
+    private fun thermal(relax: Boolean) =
+        if (relax) "[ -f $DIR/thermal ] || { $TM/.thermal_policy_03; touch $DIR/thermal; }; "
+        else "if [ -f $DIR/thermal ]; then $TM/thermal.conf; rm -f $DIR/thermal; fi; "
+
+    suspend fun batteryTempC(): Int? =
+        RootShell.run("cat /sys/class/power_supply/battery/temp")?.trim()?.toIntOrNull()?.div(10)
+
+    private fun recipe(profile: Profile, refreshHz: Int?, bypassCharge: Boolean, thermalRelax: Boolean = false): String {
         val hz = refreshHz?.takeIf { it == 60 || it == 90 || it == 120 }
-        return bypass(bypassCharge) + when (profile) {
+        return bypass(bypassCharge) + thermal(thermalRelax) + when (profile) {
             Profile.HEMAT ->
                 MIN_FLOORS + maxFreq(1450000, 1451000, 1482000) + EFFICIENT + upDelay(20, 30, 40) +
                     gpu(20) + refresh(hz ?: 60, hz ?: 60) + touch(0)
@@ -56,8 +65,13 @@ object ProfileEngine {
 
     private const val BEAT = "mkdir -p $DIR; date +%s > $DIR/heartbeat"
 
-    suspend fun apply(profile: Profile, refreshHz: Int? = null, bypassCharge: Boolean = false): Boolean =
-        RootShell.run(BEAT + "; " + recipe(profile, refreshHz, bypassCharge) + "echo ${profile.name} > $DIR/profile") != null
+    suspend fun apply(
+        profile: Profile,
+        refreshHz: Int? = null,
+        bypassCharge: Boolean = false,
+        thermalRelax: Boolean = false
+    ): Boolean =
+        RootShell.run(BEAT + "; " + recipe(profile, refreshHz, bypassCharge, thermalRelax) + "echo ${profile.name} > $DIR/profile") != null
 
     suspend fun heartbeat() {
         RootShell.run(BEAT)

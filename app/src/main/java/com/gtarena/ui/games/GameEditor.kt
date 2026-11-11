@@ -128,6 +128,13 @@ fun GameEditor(game: GameEntry, onBack: () -> Unit, modifier: Modifier = Modifie
             accent = accent,
             onCheckedChange = { save(cfg.copy(crosshair = it)) }
         )
+        SettingRow(
+            title = "Longgarin batas panas",
+            caption = "Performa baru diturunin pas bodi 53-56°C, bukan 45-48°C. HP lebih panas di tangan. Balik normal sendiri kalau baterai nyentuh 46°C atau game ditutup",
+            checked = cfg.thermalRelax,
+            accent = accent,
+            onCheckedChange = { save(cfg.copy(thermalRelax = it)) }
+        )
     }
 }
 

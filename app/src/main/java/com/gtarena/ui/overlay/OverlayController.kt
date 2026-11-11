@@ -81,7 +81,8 @@ class OverlayController(
     private val context: Context,
     private val onProfileChange: (Profile) -> Unit,
     private val onBypassChange: (Boolean) -> Unit,
-    private val onRefreshChange: (Int) -> Unit
+    private val onRefreshChange: (Int) -> Unit,
+    private val onThermalChange: (Boolean) -> Unit
 ) {
     private val settings = SettingsStore.get(context)
     private val ui = OverlayUiState()
@@ -91,6 +92,7 @@ class OverlayController(
     private var main: OverlayWindow? = null
     private var bubble: OverlayWindow? = null
     private var crosshair: OverlayWindow? = null
+    private var splash: OverlayWindow? = null
 
     private var density = 1f
     private var handleY = 0
@@ -101,6 +103,7 @@ class OverlayController(
         onProfile = { onProfileChange(it) },
         onBypass = { onBypassChange(it) },
         onRefresh = { onRefreshChange(it) },
+        onThermal = { onThermalChange(it) },
         onBubble = { settings.setFpsBubble(it) },
         onCrosshair = { setCrosshair(it) },
         onScreenshot = { screenshot() }
@@ -127,6 +130,7 @@ class OverlayController(
         try {
             attach()
             setCrosshair(session.crosshair)
+            showSplash(session)
         } catch (e: Exception) {
             hide()
         }
@@ -138,6 +142,8 @@ class OverlayController(
         remove(main)
         remove(bubble)
         remove(crosshair)
+        remove(splash)
+        splash = null
         main = null
         bubble = null
         crosshair = null
@@ -257,6 +263,19 @@ class OverlayController(
         } else if (!on) {
             remove(crosshair)
             crosshair = null
+        }
+    }
+
+    private fun showSplash(session: GameSession) {
+        val lp = baseParams(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+        lp.width = WindowManager.LayoutParams.MATCH_PARENT
+        lp.height = WindowManager.LayoutParams.MATCH_PARENT
+        lp.gravity = Gravity.CENTER
+        splash = addWindow(lp) {
+            OverlaySplash(session.profile) {
+                remove(splash)
+                splash = null
+            }
         }
     }
 
