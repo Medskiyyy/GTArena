@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,8 +14,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,6 +40,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
@@ -51,6 +55,7 @@ import com.gtarena.data.TelemetryRepository
 import com.gtarena.model.DeviceStats
 import com.gtarena.model.Profile
 import com.gtarena.model.label
+import com.gtarena.ui.icons.GTIcons
 import com.gtarena.ui.theme.Ground
 import com.gtarena.ui.theme.Hairline
 import com.gtarena.ui.theme.OnLime
@@ -82,8 +87,8 @@ private class CutShape(private val cutDp: Float) : Shape {
     }
 }
 
-internal const val PANEL_WIDTH_DP = 236
-internal const val PANEL_HEIGHT_DP = 208
+internal const val PANEL_WIDTH_DP = 300
+internal const val PANEL_HEIGHT_DP = 228
 internal const val HANDLE_WIDTH_DP = 14
 internal const val HANDLE_HEIGHT_DP = 56
 
@@ -191,44 +196,44 @@ private fun OverlayPanel(
                 .background(accent)
         )
         Column(
-            modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp),
+                    .height(46.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
                 Text(
                     text = fps?.toString() ?: "--",
                     color = accent,
-                    fontSize = 34.sp,
-                    lineHeight = 40.sp,
+                    fontSize = 40.sp,
+                    lineHeight = 46.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
                 )
                 Text(
                     text = "FPS / ${stats?.refreshHz ?: "--"} HZ",
                     color = TextSecondary,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     letterSpacing = 1.sp,
                     maxLines = 1,
-                    modifier = Modifier.padding(start = 6.dp, bottom = 7.dp)
+                    modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
                 )
                 Sparkline(
                     samples = samples,
                     color = accent,
                     modifier = Modifier
-                        .padding(start = 10.dp, bottom = 6.dp)
+                        .padding(start = 12.dp, bottom = 8.dp)
                         .weight(1f)
-                        .height(26.dp)
+                        .height(30.dp)
                 )
             }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(18.dp),
+                    .height(22.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -236,18 +241,37 @@ private fun OverlayPanel(
                 Stat("GPU", stats?.let { "${it.gpuLoadPct}%" } ?: "--")
                 Stat("BAT", stats?.let { "${it.batteryTempC}°" } ?: "--")
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Profile.values().forEach { p ->
                     OverlayProfileButton(p, p == profile, { onProfile(p) }, Modifier.weight(1f))
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                ToggleButton("Mode fokus", focusOn, accent, onFocus, Modifier.weight(1f))
-                ToggleButton("Bypass cas", bypassOn, accent, onBypass, Modifier.weight(1f))
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                ToggleButton("Kunci terang", brightnessLocked, accent, onBrightnessLock, Modifier.weight(1f))
-                ActionButton("Bersihin RAM", onCleanRam, Modifier.weight(1f))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Tile(
+                    "Fokus", GTIcons.Focus, focusOn, accent,
+                    Modifier.toggleable(value = focusOn, role = Role.Switch, onValueChange = { onFocus() })
+                )
+                Tile(
+                    "Bypass cas", GTIcons.Bypass, bypassOn, accent,
+                    Modifier.toggleable(value = bypassOn, role = Role.Switch, onValueChange = { onBypass() })
+                )
+                Tile(
+                    "Kunci terang", GTIcons.Brightness, brightnessLocked, accent,
+                    Modifier.toggleable(
+                        value = brightnessLocked,
+                        role = Role.Switch,
+                        onValueChange = { onBrightnessLock() }
+                    )
+                )
+                Tile(
+                    "Bersihin RAM", GTIcons.Chip, false, accent,
+                    Modifier.clickable(role = Role.Button, onClick = onCleanRam)
+                )
             }
         }
     }
@@ -272,8 +296,8 @@ private fun Sparkline(samples: List<Int>, color: Color, modifier: Modifier = Mod
 @Composable
 private fun Stat(label: String, value: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(text = label, color = TextSecondary, fontSize = 11.sp, letterSpacing = 1.sp, maxLines = 1)
-        Text(text = value, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(text = label, color = TextSecondary, fontSize = 12.sp, letterSpacing = 1.sp, maxLines = 1)
+        Text(text = value, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 
@@ -286,8 +310,8 @@ private fun OverlayProfileButton(
 ) {
     Column(
         modifier = modifier
-            .height(32.dp)
-            .clip(if (active) CutShape(6f) else RectangleShape)
+            .height(40.dp)
+            .clip(if (active) CutShape(8f) else RectangleShape)
             .background(if (active) profile.color else Panel)
             .selectable(selected = active, role = Role.RadioButton, onClick = onClick)
     ) {
@@ -306,7 +330,7 @@ private fun OverlayProfileButton(
             Text(
                 text = profile.label,
                 color = if (active) OnLime else TextInactive,
-                fontSize = 12.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1
             )
@@ -315,47 +339,19 @@ private fun OverlayProfileButton(
 }
 
 @Composable
-private fun ToggleButton(
-    label: String,
-    on: Boolean,
-    accent: Color,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .height(32.dp)
+private fun Tile(label: String, icon: ImageVector, on: Boolean, accent: Color, modifier: Modifier = Modifier) {
+    val tint = if (on) accent else TextSoft
+    Column(
+        modifier = Modifier
+            .width(80.dp)
+            .height(64.dp)
             .background(Panel)
             .border(1.dp, if (on) accent else Hairline)
-            .toggleable(value = on, role = Role.Switch, onValueChange = { onToggle() }),
-        contentAlignment = Alignment.Center
+            .then(modifier),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterVertically)
     ) {
-        Text(
-            text = label,
-            color = if (on) accent else TextSoft,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1
-        )
-    }
-}
-
-@Composable
-private fun ActionButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .height(32.dp)
-            .background(Panel)
-            .border(1.dp, Hairline)
-            .clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            color = TextSoft,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1
-        )
+        Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Text(text = label, color = tint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
