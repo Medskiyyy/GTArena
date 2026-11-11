@@ -12,7 +12,6 @@ import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.WindowManager
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
@@ -36,8 +35,7 @@ import kotlin.math.max
 internal class OverlayUiState {
     var session by mutableStateOf<GameSession?>(null)
     var expanded by mutableStateOf(false)
-    var screenWidthDp by mutableIntStateOf(360)
-    var screenHeightDp by mutableIntStateOf(640)
+    var onEnd by mutableStateOf(true)
 }
 
 private class OverlayOwner : SavedStateRegistryOwner, ViewModelStoreOwner {
@@ -72,13 +70,11 @@ class OverlayController(
     private var params: WindowManager.LayoutParams? = null
 
     private var density = 1f
-    private var pillX = 0
-    private var pillY = 0
+    private var handleY = 0
 
     private val callbacks = object : ComponentCallbacks {
         override fun onConfigurationChanged(newConfig: Configuration) {
-            updateScreen()
-            if (ui.expanded) setExpanded(true)
+            setExpanded(ui.expanded)
         }
 
         override fun onLowMemory() {}
@@ -126,10 +122,9 @@ class OverlayController(
         windowContext = wctx
         wm = manager
         density = wctx.resources.displayMetrics.density
-        pillX = dp(12)
-        pillY = dp(12)
+        handleY = dp(96)
         ui.expanded = false
-        updateScreen()
+        ui.onEnd = true
         wctx.registerComponentCallbacks(callbacks)
 
         val o = OverlayOwner()
@@ -140,13 +135,15 @@ class OverlayController(
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         )
+        lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
         lp.gravity = Gravity.TOP or Gravity.END
-        lp.x = pillX
-        lp.y = pillY
+        lp.x = 0
+        lp.y = handleY
         params = lp
 
         val cv = ComposeView(wctx)
@@ -157,53 +154,55 @@ class OverlayController(
             GTArenaTheme {
                 OverlayRoot(
                     state = ui,
-                    onExpandedChange = { setExpanded(it) },
                     onProfileChange = onProfileChange,
                     onBypassChange = onBypassChange
                 )
             }
         }
-        cv.setOnTouchListener(pillTouchListener())
+        cv.setOnTouchListener(handleTouchListener())
         view = cv
         manager.addView(cv, lp)
     }
 
-    private fun pillTouchListener(): android.view.View.OnTouchListener {
+    private fun handleTouchListener(): android.view.View.OnTouchListener {
         val slop = ViewConfiguration.get(context).scaledTouchSlop
         var downX = 0f
         var downY = 0f
-        var startX = 0
         var startY = 0
         var dragging = false
         return android.view.View.OnTouchListener { v, e ->
-            if (ui.expanded) return@OnTouchListener false
             val lp = params ?: return@OnTouchListener false
             val manager = wm ?: return@OnTouchListener false
+            if (ui.expanded) {
+                if (e.actionMasked == MotionEvent.ACTION_OUTSIDE) setExpanded(false)
+                return@OnTouchListener false
+            }
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = e.rawX
                     downY = e.rawY
-                    startX = lp.x
                     startY = lp.y
                     dragging = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = e.rawX - downX
                     val dy = e.rawY - downY
-                    if (!dragging && hypot(dx, dy) > slop) dragging = true
+                    if (!dragging && hypot(e.rawX - downX, dy) > slop) dragging = true
                     if (dragging) {
                         val bounds = manager.currentWindowMetrics.bounds
-                        lp.x = (startX - dx).toInt().coerceIn(0, max(0, bounds.width() - v.width))
                         lp.y = (startY + dy).toInt().coerceIn(0, max(0, bounds.height() - v.height))
-                        pillX = lp.x
-                        pillY = lp.y
+                        handleY = lp.y
                         manager.updateViewLayout(v, lp)
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (!dragging) setExpanded(true)
+                    if (dragging) {
+                        ui.onEnd = e.rawX > manager.currentWindowMetrics.bounds.width() / 2f
+                        setExpanded(false)
+                    } else {
+                        setExpanded(true)
+                    }
                     true
                 }
                 MotionEvent.ACTION_CANCEL -> true
@@ -216,15 +215,16 @@ class OverlayController(
         val lp = params ?: return
         val v = view ?: return
         val manager = wm ?: return
+        val screenHeight = manager.currentWindowMetrics.bounds.height()
+        lp.gravity = Gravity.TOP or (if (ui.onEnd) Gravity.END else Gravity.START)
         if (expanded) {
-            lp.gravity = Gravity.TOP or Gravity.START
-            lp.x = dp(10)
-            lp.y = dp(10)
-            lp.width = dp(panelWidthDp(ui.screenWidthDp, ui.screenHeightDp))
+            lp.x = dp(8)
+            lp.y = handleY.coerceIn(dp(8), max(dp(8), screenHeight - dp(PANEL_HEIGHT_DP + 8)))
+            lp.width = dp(PANEL_WIDTH_DP)
         } else {
-            lp.gravity = Gravity.TOP or Gravity.END
-            lp.x = pillX
-            lp.y = pillY
+            handleY = handleY.coerceIn(0, max(0, screenHeight - dp(HANDLE_HEIGHT_DP)))
+            lp.x = 0
+            lp.y = handleY
             lp.width = WindowManager.LayoutParams.WRAP_CONTENT
         }
         ui.expanded = expanded
@@ -232,13 +232,6 @@ class OverlayController(
             manager.updateViewLayout(v, lp)
         } catch (_: Exception) {
         }
-    }
-
-    private fun updateScreen() {
-        val manager = wm ?: return
-        val bounds = manager.currentWindowMetrics.bounds
-        ui.screenWidthDp = (bounds.width() / density).toInt()
-        ui.screenHeightDp = (bounds.height() / density).toInt()
     }
 
     private fun dp(value: Int): Int = (value * density).toInt()

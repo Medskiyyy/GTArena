@@ -99,7 +99,7 @@ fun OverlayTab() {
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = "Overlay pas main", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    text = "Tampil FPS, suhu, dan panel kontrol di atas game.",
+                    text = "Garis tipis di tepi layar. Ketuk buat buka panel FPS, suhu, dan kontrol.",
                     color = TextSecondary,
                     fontSize = 13.sp
                 )
@@ -160,13 +160,6 @@ fun OverlayTab() {
         }
 
         Hairline()
-        Text(
-            text = "Contoh tampilan",
-            color = TextSecondary,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(top = 14.dp, bottom = 10.dp)
-        )
-        OverlayPill(fps = 58, cpuTemp = 44, batteryPct = 12, accent = accent)
     }
 }
 

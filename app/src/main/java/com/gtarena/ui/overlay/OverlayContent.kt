@@ -10,15 +10,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,14 +29,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -68,7 +62,6 @@ import com.gtarena.ui.theme.TextSecondary
 import com.gtarena.ui.theme.TextSoft
 import com.gtarena.ui.theme.color
 import kotlin.math.max
-import kotlin.math.min
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -89,21 +82,23 @@ private class CutShape(private val cutDp: Float) : Shape {
     }
 }
 
-internal fun isWidePanel(screenWidthDp: Int, screenHeightDp: Int): Boolean =
-    screenHeightDp < 440 && screenWidthDp >= 640
-
-internal fun panelWidthDp(screenWidthDp: Int, screenHeightDp: Int): Int =
-    if (isWidePanel(screenWidthDp, screenHeightDp)) min(600, screenWidthDp - 20)
-    else min(300, screenWidthDp - 20).coerceAtLeast(200)
+internal const val PANEL_WIDTH_DP = 236
+internal const val PANEL_HEIGHT_DP = 208
+internal const val HANDLE_WIDTH_DP = 14
+internal const val HANDLE_HEIGHT_DP = 56
 
 @Composable
 internal fun OverlayRoot(
     state: OverlayUiState,
-    onExpandedChange: (Boolean) -> Unit,
     onProfileChange: (Profile) -> Unit,
     onBypassChange: (Boolean) -> Unit
 ) {
     val session = state.session ?: return
+    val accent = session.profile.color
+    if (!state.expanded) {
+        OverlayHandle(accent = accent, onEnd = state.onEnd)
+        return
+    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var stats by remember { mutableStateOf<DeviceStats?>(null) }
@@ -112,8 +107,8 @@ internal fun OverlayRoot(
     val focusOn by FocusMode.enabled.collectAsState()
     val brightnessLocked by FocusMode.brightnessLocked.collectAsState()
 
-    LaunchedEffect(state.expanded) {
-        if (state.expanded) FocusMode.refreshBrightnessLock()
+    LaunchedEffect(Unit) {
+        FocusMode.refreshBrightnessLock()
     }
     LaunchedEffect(Unit) {
         TelemetryRepository(context).stats(1000L).collect { stats = it }
@@ -131,77 +126,42 @@ internal fun OverlayRoot(
         }
     }
 
-    val accent = session.profile.color
     ProvideTextStyle(TextStyle(fontFamily = Saira, color = TextPrimary)) {
-        if (state.expanded) {
-            val wide = isWidePanel(state.screenWidthDp, state.screenHeightDp)
-            val width = panelWidthDp(state.screenWidthDp, state.screenHeightDp)
-            val maxHeight = (state.screenHeightDp - 20).coerceAtLeast(160)
-            OverlayPanel(
-                width = width,
-                wide = wide,
-                maxHeight = maxHeight,
-                accent = accent,
-                profile = session.profile,
-                fps = fps,
-                samples = samples,
-                stats = stats,
-                focusOn = focusOn,
-                bypassOn = session.bypass,
-                brightnessLocked = brightnessLocked,
-                onCollapse = { onExpandedChange(false) },
-                onProfile = onProfileChange,
-                onFocus = { scope.launch { if (focusOn) FocusMode.disable() else FocusMode.enable() } },
-                onBypass = { onBypassChange(!session.bypass) },
-                onBrightnessLock = { scope.launch { FocusMode.setBrightnessLocked(!brightnessLocked) } },
-                onCleanRam = { scope.launch { FocusMode.cleanRam() } }
-            )
-        } else {
-            OverlayPill(fps = fps, cpuTemp = stats?.cpuTempC, batteryPct = stats?.batteryPct, accent = accent)
-        }
+        OverlayPanel(
+            accent = accent,
+            profile = session.profile,
+            fps = fps,
+            samples = samples,
+            stats = stats,
+            focusOn = focusOn,
+            bypassOn = session.bypass,
+            brightnessLocked = brightnessLocked,
+            onProfile = onProfileChange,
+            onFocus = { scope.launch { if (focusOn) FocusMode.disable() else FocusMode.enable() } },
+            onBypass = { onBypassChange(!session.bypass) },
+            onBrightnessLock = { scope.launch { FocusMode.setBrightnessLocked(!brightnessLocked) } },
+            onCleanRam = { scope.launch { FocusMode.cleanRam() } }
+        )
     }
 }
 
 @Composable
-internal fun OverlayPill(fps: Int?, cpuTemp: Int?, batteryPct: Int?, accent: Color, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(Ground)
-            .border(1.dp, Hairline, RoundedCornerShape(50))
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+internal fun OverlayHandle(accent: Color, onEnd: Boolean) {
+    Box(
+        modifier = Modifier.size(width = HANDLE_WIDTH_DP.dp, height = HANDLE_HEIGHT_DP.dp),
+        contentAlignment = if (onEnd) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        Text(
-            text = "${fps?.toString() ?: "--"} FPS",
-            color = accent,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1
-        )
-        Text(
-            text = "${cpuTemp?.toString() ?: "--"}°",
-            color = TextSoft,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1
-        )
-        Text(
-            text = "${batteryPct?.toString() ?: "--"}%",
-            color = TextSoft,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(40.dp)
+                .background(accent.copy(alpha = 0.75f))
         )
     }
 }
 
 @Composable
 private fun OverlayPanel(
-    width: Int,
-    wide: Boolean,
-    maxHeight: Int,
     accent: Color,
     profile: Profile,
     fps: Int?,
@@ -210,135 +170,85 @@ private fun OverlayPanel(
     focusOn: Boolean,
     bypassOn: Boolean,
     brightnessLocked: Boolean,
-    onCollapse: () -> Unit,
     onProfile: (Profile) -> Unit,
     onFocus: () -> Unit,
     onBypass: () -> Unit,
     onBrightnessLock: () -> Unit,
     onCleanRam: () -> Unit
 ) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = remember { CutShape(10f) }
     Column(
         modifier = Modifier
-            .width(width.dp)
-            .heightIn(max = maxHeight.dp)
+            .width(PANEL_WIDTH_DP.dp)
             .clip(shape)
-            .background(Ground)
+            .background(Ground.copy(alpha = 0.94f))
             .border(1.dp, Hairline, shape)
-            .verticalScroll(rememberScrollState())
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(28.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .height(2.dp)
+                .background(accent)
+        )
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "GT ARENA",
-                color = TextPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
-            )
-            Box(
-                modifier = Modifier
-                    .requiredSize(44.dp)
-                    .clickable(role = Role.Button, onClick = onCollapse),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Canvas(modifier = Modifier.requiredSize(20.dp)) {
-                    val s = size.width / 24f
-                    val p = Path().apply {
-                        moveTo(15f * s, 6f * s)
-                        lineTo(9f * s, 12f * s)
-                        lineTo(15f * s, 18f * s)
-                    }
-                    drawPath(
-                        p,
-                        TextSoft,
-                        style = Stroke(width = 2f * s, cap = StrokeCap.Butt, join = StrokeJoin.Miter)
-                    )
-                }
-            }
-        }
-
-        val fpsCard: @Composable () -> Unit = {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Panel)
-                    .border(1.dp, Hairline, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .height(40.dp),
+                verticalAlignment = Alignment.Bottom
             ) {
-                Column {
-                    Text(
-                        text = fps?.toString() ?: "--",
-                        color = accent,
-                        fontSize = 44.sp,
-                        lineHeight = 46.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = "FPS, layar ${stats?.refreshHz ?: "--"} Hz",
-                        color = TextSecondary,
-                        fontSize = 13.sp,
-                        maxLines = 1
-                    )
-                }
+                Text(
+                    text = fps?.toString() ?: "--",
+                    color = accent,
+                    fontSize = 34.sp,
+                    lineHeight = 40.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+                Text(
+                    text = "FPS / ${stats?.refreshHz ?: "--"} HZ",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.sp,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = 6.dp, bottom = 7.dp)
+                )
                 Sparkline(
                     samples = samples,
                     color = accent,
                     modifier = Modifier
-                        .padding(start = 12.dp)
+                        .padding(start = 10.dp, bottom = 6.dp)
                         .weight(1f)
-                        .height(48.dp)
+                        .height(26.dp)
                 )
             }
-        }
-        val tiles: @Composable () -> Unit = {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                StatTile("CPU", stats?.let { "${it.cpuTempC}°" } ?: "--", Modifier.weight(1f))
-                StatTile("GPU", stats?.let { "${it.gpuLoadPct}%" } ?: "--", Modifier.weight(1f))
-                StatTile("Baterai", stats?.let { "${it.batteryTempC}°" } ?: "--", Modifier.weight(1f))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Stat("CPU", stats?.let { "${it.cpuTempC}°" } ?: "--")
+                Stat("GPU", stats?.let { "${it.gpuLoadPct}%" } ?: "--")
+                Stat("BAT", stats?.let { "${it.batteryTempC}°" } ?: "--")
             }
-        }
-        val controls: @Composable () -> Unit = {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Profile.values().forEach { p ->
                     OverlayProfileButton(p, p == profile, { onProfile(p) }, Modifier.weight(1f))
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 ToggleButton("Mode fokus", focusOn, accent, onFocus, Modifier.weight(1f))
                 ToggleButton("Bypass cas", bypassOn, accent, onBypass, Modifier.weight(1f))
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 ToggleButton("Kunci terang", brightnessLocked, accent, onBrightnessLock, Modifier.weight(1f))
                 ActionButton("Bersihin RAM", onCleanRam, Modifier.weight(1f))
             }
-        }
-
-        if (wide) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    fpsCard()
-                    tiles()
-                }
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    controls()
-                }
-            }
-        } else {
-            fpsCard()
-            tiles()
-            controls()
         }
     }
 }
@@ -346,38 +256,24 @@ private fun OverlayPanel(
 @Composable
 private fun Sparkline(samples: List<Int>, color: Color, modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
-        val top = 1.dp.toPx()
-        val h = size.height - 2 * top
-        drawLine(
-            Hairline,
-            Offset(0f, top),
-            Offset(size.width, top),
-            strokeWidth = 1.dp.toPx()
-        )
         if (samples.size < 2) return@Canvas
         val ceiling = max(60, samples.max()).toFloat()
         val step = size.width / 29f
         val path = Path()
         samples.forEachIndexed { i, v ->
             val x = i * step
-            val y = top + h * (1f - v.coerceAtLeast(0) / ceiling)
+            val y = size.height * (1f - v.coerceAtLeast(0) / ceiling)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        drawPath(path, color, style = Stroke(width = 2.dp.toPx(), join = StrokeJoin.Round))
+        drawPath(path, color, style = Stroke(width = 1.5.dp.toPx(), join = StrokeJoin.Miter))
     }
 }
 
 @Composable
-private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Panel)
-            .border(1.dp, Hairline, RoundedCornerShape(12.dp))
-            .padding(horizontal = 8.dp, vertical = 6.dp)
-    ) {
-        Text(text = label, color = TextSecondary, fontSize = 13.sp, maxLines = 1)
-        Text(text = value, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+private fun Stat(label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text(text = label, color = TextSecondary, fontSize = 11.sp, letterSpacing = 1.sp, maxLines = 1)
+        Text(text = value, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 
@@ -390,15 +286,15 @@ private fun OverlayProfileButton(
 ) {
     Column(
         modifier = modifier
-            .height(44.dp)
-            .clip(if (active) CutShape(8f) else RectangleShape)
+            .height(32.dp)
+            .clip(if (active) CutShape(6f) else RectangleShape)
             .background(if (active) profile.color else Panel)
             .selectable(selected = active, role = Role.RadioButton, onClick = onClick)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(4.dp)
+                .height(3.dp)
                 .background(profile.color)
         )
         Box(
@@ -410,7 +306,7 @@ private fun OverlayProfileButton(
             Text(
                 text = profile.label,
                 color = if (active) OnLime else TextInactive,
-                fontSize = 14.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1
             )
@@ -426,20 +322,18 @@ private fun ToggleButton(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(12.dp)
     Box(
         modifier = modifier
-            .height(44.dp)
-            .clip(shape)
+            .height(32.dp)
             .background(Panel)
-            .border(1.dp, if (on) accent else Hairline, shape)
+            .border(1.dp, if (on) accent else Hairline)
             .toggleable(value = on, role = Role.Switch, onValueChange = { onToggle() }),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
             color = if (on) accent else TextSoft,
-            fontSize = 14.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1
         )
@@ -448,20 +342,18 @@ private fun ToggleButton(
 
 @Composable
 private fun ActionButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(12.dp)
     Box(
         modifier = modifier
-            .height(44.dp)
-            .clip(shape)
+            .height(32.dp)
             .background(Panel)
-            .border(1.dp, Hairline, shape)
+            .border(1.dp, Hairline)
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
             color = TextSoft,
-            fontSize = 14.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1
         )
