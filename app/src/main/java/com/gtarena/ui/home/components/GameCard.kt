@@ -1,0 +1,108 @@
+package com.gtarena.ui.home.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.gtarena.model.GameEntry
+import com.gtarena.model.label
+import com.gtarena.ui.icons.GTIcons
+import com.gtarena.ui.theme.AppIcon
+import com.gtarena.ui.theme.BevelBrush
+import com.gtarena.ui.theme.ChamferShape
+import com.gtarena.ui.theme.Ground
+import com.gtarena.ui.theme.Label
+import com.gtarena.ui.theme.OnLime
+import com.gtarena.ui.theme.PanelLo
+import com.gtarena.ui.theme.TextPrimary
+import com.gtarena.ui.theme.color
+import com.gtarena.ui.theme.textOnDark
+
+private val CardShape = ChamferShape(16.dp)
+private val IconShape = ChamferShape(9.dp)
+private val PlayShape = ChamferShape(10.dp, topStart = false, bottomEnd = false, bottomStart = true)
+private val Scrim = Brush.verticalGradient(listOf(Color(0x66060607), Ground.copy(alpha = 0.94f)))
+
+@Composable
+fun GameCard(game: GameEntry, onLaunch: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(width = 132.dp, height = 168.dp)
+            .clip(CardShape)
+            .background(PanelLo)
+            .border(1.dp, BevelBrush, CardShape)
+            .clickable(role = Role.Button, onClickLabel = "Main ${game.label}", onClick = onLaunch)
+    ) {
+        AppIcon(
+            pkg = game.pkg,
+            modifier = Modifier
+                .fillMaxSize()
+                .scale(1.7f)
+                .blur(22.dp)
+        )
+        Box(Modifier.fillMaxSize().background(Scrim))
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(34.dp)
+                .clip(PlayShape)
+                .background(game.profile.color),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = GTIcons.Play,
+                contentDescription = null,
+                tint = OnLime,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp)
+        ) {
+            AppIcon(
+                pkg = game.pkg,
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(IconShape)
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = game.label,
+                color = TextPrimary,
+                fontSize = 15.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Label(
+                text = "${game.profile.label} · ${game.refreshHz} Hz",
+                color = game.profile.textOnDark,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(top = 3.dp)
+            )
+        }
+    }
+}

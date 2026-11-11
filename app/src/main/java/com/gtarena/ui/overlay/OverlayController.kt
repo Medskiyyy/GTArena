@@ -5,18 +5,22 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.Display
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
@@ -26,16 +30,30 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.gtarena.data.FpsReader
+import com.gtarena.data.GameTools
+import com.gtarena.data.SettingsStore
 import com.gtarena.model.Profile
 import com.gtarena.service.GameSession
 import com.gtarena.ui.theme.GTArenaTheme
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 internal class OverlayUiState {
     var session by mutableStateOf<GameSession?>(null)
     var expanded by mutableStateOf(false)
     var onEnd by mutableStateOf(true)
+    var fps by mutableStateOf<Int?>(null)
+    val samples = mutableStateListOf<Int>()
+    var bubble by mutableStateOf(false)
+    var crosshair by mutableStateOf(false)
+    var sessionStart by mutableLongStateOf(0L)
 }
 
 private class OverlayOwner : SavedStateRegistryOwner, ViewModelStoreOwner {
@@ -57,32 +75,54 @@ private class OverlayOwner : SavedStateRegistryOwner, ViewModelStoreOwner {
     }
 }
 
+private class OverlayWindow(val view: ComposeView, val owner: OverlayOwner, val params: WindowManager.LayoutParams)
+
 class OverlayController(
     private val context: Context,
     private val onProfileChange: (Profile) -> Unit,
-    private val onBypassChange: (Boolean) -> Unit
+    private val onBypassChange: (Boolean) -> Unit,
+    private val onRefreshChange: (Int) -> Unit
 ) {
+    private val settings = SettingsStore.get(context)
     private val ui = OverlayUiState()
     private var windowContext: Context? = null
     private var wm: WindowManager? = null
-    private var view: ComposeView? = null
-    private var owner: OverlayOwner? = null
-    private var params: WindowManager.LayoutParams? = null
+    private var scope: CoroutineScope? = null
+    private var main: OverlayWindow? = null
+    private var bubble: OverlayWindow? = null
+    private var crosshair: OverlayWindow? = null
 
     private var density = 1f
     private var handleY = 0
+    private var bubbleX = 0
+    private var bubbleY = 0
+
+    private val actions = OverlayActions(
+        onProfile = { onProfileChange(it) },
+        onBypass = { onBypassChange(it) },
+        onRefresh = { onRefreshChange(it) },
+        onBubble = { settings.setFpsBubble(it) },
+        onCrosshair = { setCrosshair(it) },
+        onScreenshot = { screenshot() }
+    )
 
     private val callbacks = object : ComponentCallbacks {
         override fun onConfigurationChanged(newConfig: Configuration) {
             setExpanded(ui.expanded)
+            clampBubble()
         }
 
         override fun onLowMemory() {}
     }
 
     fun show(session: GameSession) {
+        if (ui.session?.pkg != session.pkg) {
+            ui.sessionStart = SystemClock.elapsedRealtime()
+            ui.samples.clear()
+            ui.fps = null
+        }
         ui.session = session
-        if (view != null) return
+        if (main != null) return
         if (!Settings.canDrawOverlays(context)) return
         try {
             attach()
@@ -92,25 +132,24 @@ class OverlayController(
     }
 
     fun hide() {
-        val v = view
-        val m = wm
-        if (v != null && m != null) {
-            try {
-                m.removeView(v)
-            } catch (_: Exception) {
-            }
-        }
+        scope?.cancel()
+        scope = null
+        remove(main)
+        remove(bubble)
+        remove(crosshair)
+        main = null
+        bubble = null
+        crosshair = null
         try {
             windowContext?.unregisterComponentCallbacks(callbacks)
         } catch (_: Exception) {
         }
-        owner?.destroy()
-        view = null
-        owner = null
         wm = null
         windowContext = null
-        params = null
         ui.expanded = false
+        ui.bubble = false
+        ui.crosshair = false
+        ui.session = null
     }
 
     private fun attach() {
@@ -118,60 +157,182 @@ class OverlayController(
         val display = dm.getDisplay(Display.DEFAULT_DISPLAY)
         val wctx = context.createDisplayContext(display)
             .createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
-        val manager = wctx.getSystemService(WindowManager::class.java)
         windowContext = wctx
-        wm = manager
+        wm = wctx.getSystemService(WindowManager::class.java)
         density = wctx.resources.displayMetrics.density
         handleY = dp(96)
+        loadBubblePos()
         ui.expanded = false
         ui.onEnd = true
         wctx.registerComponentCallbacks(callbacks)
 
-        val o = OverlayOwner()
-        owner = o
+        val lp = baseParams(WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH)
+        lp.gravity = Gravity.TOP or Gravity.END
+        lp.x = 0
+        lp.y = handleY
+        main = addWindow(lp) { OverlayRoot(state = ui, actions = actions) }.also {
+            it.view.setOnTouchListener(handleTouchListener())
+        }
+
+        val s = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        scope = s
+        s.launch {
+            settings.fpsBubble.collect { setBubble(it) }
+        }
+        s.launch {
+            while (true) {
+                val session = ui.session
+                if (session != null && (ui.expanded || ui.bubble)) {
+                    val v = FpsReader.read(session.pkg)
+                    ui.fps = v
+                    if (v != null) {
+                        ui.samples.add(v)
+                        if (ui.samples.size > 40) ui.samples.removeAt(0)
+                    }
+                }
+                delay(1000L)
+            }
+        }
+    }
+
+    private fun baseParams(extraFlags: Int = 0): WindowManager.LayoutParams {
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                extraFlags,
             PixelFormat.TRANSLUCENT
         )
         lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-        lp.gravity = Gravity.TOP or Gravity.END
-        lp.x = 0
-        lp.y = handleY
-        params = lp
-
-        val cv = ComposeView(wctx)
-        cv.setViewTreeLifecycleOwner(o)
-        cv.setViewTreeSavedStateRegistryOwner(o)
-        cv.setViewTreeViewModelStoreOwner(o)
-        cv.setContent {
-            GTArenaTheme {
-                OverlayRoot(
-                    state = ui,
-                    onProfileChange = onProfileChange,
-                    onBypassChange = onBypassChange
-                )
-            }
-        }
-        cv.setOnTouchListener(handleTouchListener())
-        view = cv
-        manager.addView(cv, lp)
+        return lp
     }
 
-    private fun handleTouchListener(): android.view.View.OnTouchListener {
+    private fun addWindow(lp: WindowManager.LayoutParams, content: @Composable () -> Unit): OverlayWindow {
+        val owner = OverlayOwner()
+        val view = ComposeView(windowContext!!)
+        view.setViewTreeLifecycleOwner(owner)
+        view.setViewTreeSavedStateRegistryOwner(owner)
+        view.setViewTreeViewModelStoreOwner(owner)
+        view.setContent { GTArenaTheme(content) }
+        wm!!.addView(view, lp)
+        return OverlayWindow(view, owner, lp)
+    }
+
+    private fun remove(window: OverlayWindow?) {
+        window ?: return
+        try {
+            wm?.removeView(window.view)
+        } catch (_: Exception) {
+        }
+        window.owner.destroy()
+    }
+
+    private fun setBubble(on: Boolean) {
+        ui.bubble = on
+        if (on && bubble == null && wm != null) {
+            val lp = baseParams()
+            lp.gravity = Gravity.TOP or Gravity.START
+            lp.x = bubbleX
+            lp.y = bubbleY
+            bubble = addWindow(lp) { OverlayBubble(ui) }.also {
+                it.view.setOnTouchListener(bubbleTouchListener())
+            }
+        } else if (!on) {
+            remove(bubble)
+            bubble = null
+        }
+    }
+
+    private fun setCrosshair(on: Boolean) {
+        ui.crosshair = on
+        if (on && crosshair == null && wm != null) {
+            val lp = baseParams(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+            lp.gravity = Gravity.CENTER
+            crosshair = addWindow(lp) { OverlayCrosshair(ui) }
+        } else if (!on) {
+            remove(crosshair)
+            crosshair = null
+        }
+    }
+
+    private fun screenshot() {
+        setExpanded(false)
+        scope?.launch {
+            delay(400L)
+            GameTools.screenshot(context)
+        }
+    }
+
+    private fun bubbleTouchListener(): View.OnTouchListener {
+        var downX = 0f
+        var downY = 0f
+        var startX = 0
+        var startY = 0
+        return View.OnTouchListener { v, e ->
+            val lp = bubble?.params ?: return@OnTouchListener false
+            val manager = wm ?: return@OnTouchListener false
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = e.rawX
+                    downY = e.rawY
+                    startX = lp.x
+                    startY = lp.y
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val bounds = manager.currentWindowMetrics.bounds
+                    lp.x = (startX + e.rawX - downX).toInt().coerceIn(0, max(0, bounds.width() - v.width))
+                    lp.y = (startY + e.rawY - downY).toInt().coerceIn(0, max(0, bounds.height() - v.height))
+                    bubbleX = lp.x
+                    bubbleY = lp.y
+                    manager.updateViewLayout(v, lp)
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    settings.setBubblePos(isLandscape(), bubbleX, bubbleY)
+                    true
+                }
+                else -> true
+            }
+        }
+    }
+
+    private fun isLandscape(): Boolean {
+        val bounds = wm?.currentWindowMetrics?.bounds ?: return false
+        return bounds.width() > bounds.height()
+    }
+
+    private fun loadBubblePos() {
+        val saved = settings.bubblePos(isLandscape())
+        bubbleX = saved?.first ?: dp(20)
+        bubbleY = saved?.second ?: dp(6)
+    }
+
+    private fun clampBubble() {
+        loadBubblePos()
+        val b = bubble ?: return
+        val manager = wm ?: return
+        val bounds = manager.currentWindowMetrics.bounds
+        b.params.x = bubbleX.coerceIn(0, max(0, bounds.width() - b.view.width))
+        b.params.y = bubbleY.coerceIn(0, max(0, bounds.height() - b.view.height))
+        try {
+            manager.updateViewLayout(b.view, b.params)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun handleTouchListener(): View.OnTouchListener {
         val slop = ViewConfiguration.get(context).scaledTouchSlop
         var downX = 0f
         var downY = 0f
         var startY = 0
         var dragging = false
-        return android.view.View.OnTouchListener { v, e ->
-            val lp = params ?: return@OnTouchListener false
+        return View.OnTouchListener { v, e ->
+            val lp = main?.params ?: return@OnTouchListener false
             val manager = wm ?: return@OnTouchListener false
             if (ui.expanded) {
                 if (e.actionMasked == MotionEvent.ACTION_OUTSIDE) setExpanded(false)
@@ -212,9 +373,9 @@ class OverlayController(
     }
 
     private fun setExpanded(expanded: Boolean) {
-        val lp = params ?: return
-        val v = view ?: return
+        val window = main ?: return
         val manager = wm ?: return
+        val lp = window.params
         val screenHeight = manager.currentWindowMetrics.bounds.height()
         lp.gravity = Gravity.TOP or (if (ui.onEnd) Gravity.END else Gravity.START)
         if (expanded) {
@@ -229,7 +390,7 @@ class OverlayController(
         }
         ui.expanded = expanded
         try {
-            manager.updateViewLayout(v, lp)
+            manager.updateViewLayout(window.view, lp)
         } catch (_: Exception) {
         }
     }

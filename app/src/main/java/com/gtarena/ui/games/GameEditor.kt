@@ -1,5 +1,6 @@
 package com.gtarena.ui.games
 
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,19 +11,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -33,14 +31,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gtarena.data.GameConfig
 import com.gtarena.data.SettingsStore
 import com.gtarena.model.GameEntry
-import com.gtarena.ui.home.components.CutBottomEndShape
 import com.gtarena.ui.home.components.ProfileSelector
 import com.gtarena.ui.settings.SettingRow
 import com.gtarena.ui.tabInsets
+import com.gtarena.ui.theme.AppIcon
+import com.gtarena.ui.theme.ChamferShape
 import com.gtarena.ui.theme.Ground
-import com.gtarena.ui.theme.OnLime
-import com.gtarena.ui.theme.Panel
-import com.gtarena.ui.theme.TextInactive
+import com.gtarena.ui.theme.Label
+import com.gtarena.ui.theme.SlantTab
 import com.gtarena.ui.theme.TextPrimary
 import com.gtarena.ui.theme.TextSecondary
 import com.gtarena.ui.theme.color
@@ -55,7 +53,7 @@ fun BackLink(onBack: () -> Unit) {
             .clickable(role = Role.Button, onClick = onBack),
         contentAlignment = Alignment.CenterStart
     ) {
-        Text(text = "Kembali", color = TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Label(text = "‹  Kembali", fontSize = 12.sp)
     }
 }
 
@@ -77,7 +75,12 @@ fun GameEditor(game: GameEntry, onBack: () -> Unit, modifier: Modifier = Modifie
             .verticalScroll(rememberScrollState())
     ) {
         BackLink(onBack)
-        Box(modifier = Modifier.fillMaxWidth().height(44.dp), contentAlignment = Alignment.CenterStart) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AppIcon(pkg = game.pkg, modifier = Modifier.size(44.dp).clip(ChamferShape(9.dp)))
             Text(
                 text = game.label,
                 color = TextPrimary,
@@ -92,13 +95,13 @@ fun GameEditor(game: GameEntry, onBack: () -> Unit, modifier: Modifier = Modifie
         SectionLabel("Refresh rate")
         Row(
             modifier = Modifier.fillMaxWidth().selectableGroup().padding(bottom = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             RefreshOptions.forEach { hz ->
-                HzButton(
-                    hz = hz,
+                SlantTab(
+                    text = "$hz Hz",
                     active = hz == cfg.refreshHz,
-                    accent = accent,
+                    color = accent,
                     onClick = { save(cfg.copy(refreshHz = hz)) },
                     modifier = Modifier.weight(1f)
                 )
@@ -123,32 +126,5 @@ fun GameEditor(game: GameEntry, onBack: () -> Unit, modifier: Modifier = Modifie
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        color = TextSecondary,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 6.dp, bottom = 8.dp)
-    )
-}
-
-@Composable
-private fun HzButton(hz: Int, active: Boolean, accent: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .height(54.dp)
-            .clip(if (active) CutBottomEndShape else RectangleShape)
-            .background(if (active) accent else Panel)
-            .selectable(selected = active, role = Role.RadioButton, onClick = onClick)
-    ) {
-        Box(Modifier.fillMaxWidth().height(4.dp).background(accent))
-        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-            Text(
-                text = "$hz Hz",
-                color = if (active) OnLime else TextInactive,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
+    Label(text = text, modifier = Modifier.padding(top = 10.dp, bottom = 8.dp))
 }

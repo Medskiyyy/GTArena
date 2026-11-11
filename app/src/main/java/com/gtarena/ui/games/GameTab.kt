@@ -85,7 +85,7 @@ private fun GameList(
             GameRow(
                 game = game,
                 accent = accent,
-                primary = index == 0,
+                primary = false,
                 showDivider = true,
                 onLaunch = { onLaunch(game) },
                 onClick = { onEdit(game) }

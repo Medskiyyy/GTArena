@@ -1,5 +1,6 @@
 package com.gtarena.ui.games
 
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,16 +10,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -32,6 +34,8 @@ import com.gtarena.data.SettingsStore
 import com.gtarena.ui.ScreenTitle
 import com.gtarena.ui.settings.GTSwitch
 import com.gtarena.ui.tabInsets
+import com.gtarena.ui.theme.AppIcon
+import com.gtarena.ui.theme.ChamferShape
 import com.gtarena.ui.theme.GaugeTrack
 import com.gtarena.ui.theme.Ground
 import com.gtarena.ui.theme.TextPrimary
@@ -72,6 +76,13 @@ fun AddAppsScreen(
                         .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    AppIcon(
+                        pkg = app.pkg,
+                        modifier = Modifier
+                            .padding(end = 12.dp)
+                            .size(36.dp)
+                            .clip(ChamferShape(7.dp))
+                    )
                     Text(
                         text = app.label,
                         color = TextPrimary,

@@ -28,6 +28,9 @@ class SettingsStore private constructor(context: Context) {
     private val _overlayEnabled = MutableStateFlow(prefs.getBoolean(KEY_OVERLAY, true))
     val overlayEnabled: StateFlow<Boolean> = _overlayEnabled
 
+    private val _fpsBubble = MutableStateFlow(prefs.getBoolean(KEY_BUBBLE, true))
+    val fpsBubble: StateFlow<Boolean> = _fpsBubble
+
     private val _extraGames = MutableStateFlow(prefs.getStringSet(KEY_EXTRA, emptySet())!!.toSet())
     val extraGames: StateFlow<Set<String>> = _extraGames
 
@@ -48,6 +51,24 @@ class SettingsStore private constructor(context: Context) {
         _overlayEnabled.value = on
         prefs.edit().putBoolean(KEY_OVERLAY, on).apply()
     }
+
+    fun setFpsBubble(on: Boolean) {
+        _fpsBubble.value = on
+        prefs.edit().putBoolean(KEY_BUBBLE, on).apply()
+    }
+
+    fun bubblePos(landscape: Boolean): Pair<Int, Int>? {
+        val raw = prefs.getString(bubbleKey(landscape), null)?.split(",") ?: return null
+        val x = raw.getOrNull(0)?.toIntOrNull() ?: return null
+        val y = raw.getOrNull(1)?.toIntOrNull() ?: return null
+        return x to y
+    }
+
+    fun setBubblePos(landscape: Boolean, x: Int, y: Int) {
+        prefs.edit().putString(bubbleKey(landscape), "$x,$y").apply()
+    }
+
+    private fun bubbleKey(landscape: Boolean) = if (landscape) "bubble_pos_land" else "bubble_pos_port"
 
     fun setExtraGame(pkg: String, included: Boolean) {
         val next = if (included) _extraGames.value + pkg else _extraGames.value - pkg
@@ -77,6 +98,7 @@ class SettingsStore private constructor(context: Context) {
         private const val KEY_PROFILE = "profile"
         private const val KEY_AUTO = "auto_apply"
         private const val KEY_OVERLAY = "overlay_enabled"
+        private const val KEY_BUBBLE = "fps_bubble"
         private const val KEY_EXTRA = "extra_games"
         private const val GAME_PREFIX = "game:"
 

@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,31 +19,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gtarena.model.GameEntry
 import com.gtarena.model.label
 import com.gtarena.ui.icons.GTIcons
+import com.gtarena.ui.theme.AppIcon
+import com.gtarena.ui.theme.BevelBrush
+import com.gtarena.ui.theme.ChamferShape
 import com.gtarena.ui.theme.GaugeTrack
+import com.gtarena.ui.theme.Label
 import com.gtarena.ui.theme.OnLime
-import com.gtarena.ui.theme.OutlineButton
 import com.gtarena.ui.theme.TextPrimary
-import com.gtarena.ui.theme.TextSecondary
 import com.gtarena.ui.theme.textOnDark
 
-fun gameInitials(label: String): String {
-    val words = label.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-    return when {
-        words.isEmpty() -> ""
-        words.size == 1 -> words[0].take(2)
-        else -> "${words[0].first()}${words[1].first()}"
-    }.uppercase()
-}
+private val TileShape = ChamferShape(9.dp)
 
 fun gameSubtitle(game: GameEntry): String = buildList {
     add(game.profile.label)
@@ -69,23 +59,16 @@ fun GameRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-                .padding(vertical = 8.dp),
+                .padding(vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(
+            AppIcon(
+                pkg = game.pkg,
                 modifier = Modifier
-                    .size(46.dp)
-                    .background(GaugeTrack, RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = gameInitials(game.label),
-                    color = TextPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
+                    .size(48.dp)
+                    .clip(TileShape)
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = game.label,
@@ -95,33 +78,28 @@ fun GameRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = buildAnnotatedString {
-                        withStyle(SpanStyle(color = game.profile.textOnDark, fontWeight = FontWeight.Bold)) {
-                            append(game.profile.label)
-                        }
-                        append(gameSubtitle(game).removePrefix(game.profile.label))
-                    },
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                Label(
+                    text = gameSubtitle(game),
+                    color = game.profile.textOnDark,
+                    modifier = Modifier.padding(top = 2.dp)
                 )
             }
-            val buttonModifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .then(
-                    if (primary) Modifier.background(accent)
-                    else Modifier.border(1.dp, OutlineButton, CircleShape)
-                )
-                .clickable(role = Role.Button, onClick = onLaunch)
-            Box(modifier = buttonModifier, contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(TileShape)
+                    .then(
+                        if (primary) Modifier.background(accent)
+                        else Modifier.border(1.dp, BevelBrush, TileShape)
+                    )
+                    .clickable(role = Role.Button, onClick = onLaunch),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
                     imageVector = GTIcons.Play,
                     contentDescription = "Main ${game.label}",
                     tint = if (primary) OnLime else TextPrimary,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }

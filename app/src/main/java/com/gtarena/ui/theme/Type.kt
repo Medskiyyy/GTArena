@@ -2,37 +2,31 @@ package com.gtarena.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.sp
 import com.gtarena.R
 
 @OptIn(ExperimentalTextApi::class)
-val Saira = FontFamily(
-    Font(
-        R.font.saira,
-        FontWeight.Normal,
-        variationSettings = FontVariation.Settings(FontVariation.weight(400))
-    ),
-    Font(
-        R.font.saira,
-        FontWeight.SemiBold,
-        variationSettings = FontVariation.Settings(FontVariation.weight(600))
-    ),
-    Font(
-        R.font.saira,
-        FontWeight.Bold,
-        variationSettings = FontVariation.Settings(FontVariation.weight(700))
-    ),
-    Font(
-        R.font.saira,
-        FontWeight.ExtraBold,
-        variationSettings = FontVariation.Settings(FontVariation.weight(800))
-    )
+private fun saira(width: Float) = FontFamily(
+    listOf(400, 600, 700, 800).map { weight ->
+        Font(
+            R.font.saira,
+            FontWeight(weight),
+            variationSettings = FontVariation.Settings(
+                FontVariation.weight(weight),
+                FontVariation.width(width)
+            )
+        )
+    }
 )
+
+val Saira = saira(100f)
+val SairaCond = saira(78f)
+val SairaWide = saira(120f)
 
 val GTTypography = Typography(
     bodyLarge = TextStyle(fontFamily = Saira, fontWeight = FontWeight.Normal, fontSize = 16.sp),

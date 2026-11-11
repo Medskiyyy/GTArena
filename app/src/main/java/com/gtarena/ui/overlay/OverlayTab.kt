@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,10 +39,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.gtarena.data.RootShell
 import com.gtarena.data.SettingsStore
-import com.gtarena.ui.settings.GTSwitch
+import com.gtarena.ui.ScreenTitle
+import com.gtarena.ui.settings.SettingRow
+import com.gtarena.ui.theme.GaugeTrack
 import com.gtarena.ui.theme.Ground
-import com.gtarena.ui.theme.Hairline
+import com.gtarena.ui.theme.Label
 import com.gtarena.ui.theme.OnLime
+import com.gtarena.ui.theme.SlantShape
 import com.gtarena.ui.theme.TextPrimary
 import com.gtarena.ui.theme.TextSecondary
 import com.gtarena.ui.theme.Warn
@@ -56,6 +57,7 @@ fun OverlayTab() {
     val context = LocalContext.current
     val settings = remember { SettingsStore.get(context) }
     val enabled by settings.overlayEnabled.collectAsState()
+    val bubble by settings.fpsBubble.collectAsState()
     val profile by settings.profile.collectAsState()
     val accent = profile.color
     val scope = rememberCoroutineScope()
@@ -77,45 +79,21 @@ fun OverlayTab() {
             .verticalScroll(rememberScrollState())
             .padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 16.dp)
     ) {
-        Box(modifier = Modifier.height(44.dp), contentAlignment = Alignment.CenterStart) {
-            Text(
-                text = "OVERLAY",
-                color = TextPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.sp
-            )
-        }
-
-        Hairline()
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 64.dp)
-                .padding(vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = "Overlay pas main", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    text = "Garis tipis di tepi layar. Ketuk buat buka panel FPS, suhu, dan kontrol.",
-                    color = TextSecondary,
-                    fontSize = 13.sp
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .padding(start = 16.dp)
-                    .heightIn(min = 44.dp)
-                    .toggleable(value = enabled, role = Role.Switch, onValueChange = { settings.setOverlayEnabled(it) }),
-                contentAlignment = Alignment.Center
-            ) {
-                GTSwitch(checked = enabled, accent = accent)
-            }
-        }
-
-        Hairline()
+        ScreenTitle("Overlay", modifier = Modifier.padding(bottom = 14.dp))
+        SettingRow(
+            title = "Overlay pas main",
+            caption = "Garis tipis di tepi layar. Ketuk buat buka panel kontrol, geser buat mindahin.",
+            checked = enabled,
+            accent = accent,
+            onCheckedChange = settings::setOverlayEnabled
+        )
+        SettingRow(
+            title = "Bubble FPS",
+            caption = "Angka FPS kecil yang selalu keliatan pas main. Bisa digeser ke mana aja.",
+            checked = bubble,
+            accent = accent,
+            onCheckedChange = settings::setFpsBubble
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -129,7 +107,7 @@ fun OverlayTab() {
                     text = "Tampil di atas app lain",
                     color = TextPrimary,
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = if (granted) "Udah diizinin" else "Belum diizinin, overlay nggak bakal muncul",
@@ -141,8 +119,8 @@ fun OverlayTab() {
                 Box(
                     modifier = Modifier
                         .padding(start = 16.dp)
-                        .heightIn(min = 44.dp)
-                        .clip(RoundedCornerShape(3.dp))
+                        .height(44.dp)
+                        .clip(SlantShape(8.dp))
                         .background(accent)
                         .clickable(role = Role.Button) {
                             scope.launch {
@@ -151,21 +129,27 @@ fun OverlayTab() {
                                 if (!granted) openOverlaySettings(context)
                             }
                         }
-                        .padding(horizontal = 18.dp),
+                        .padding(horizontal = 22.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "Izinin", color = OnLime, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Label(text = "Izinin", color = OnLime, fontSize = 13.sp)
                 }
             }
         }
-
-        Hairline()
+        Box(Modifier.fillMaxWidth().height(1.dp).background(GaugeTrack))
+        Label(
+            text = "Isi panel",
+            modifier = Modifier.padding(top = 16.dp, bottom = 6.dp)
+        )
+        Text(
+            text = "FPS dan grafiknya, suhu CPU, beban GPU, suhu baterai, ganti profil, kecerahan, " +
+                "crosshair, refresh rate, mode fokus, bypass cas, kunci terang, screenshot, " +
+                "rekam layar (maks 3 menit, tanpa suara), dan bersihin RAM.",
+            color = TextSecondary,
+            fontSize = 13.sp,
+            lineHeight = 18.sp
+        )
     }
-}
-
-@Composable
-private fun Hairline() {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(Hairline))
 }
 
 private fun openOverlaySettings(context: Context) {

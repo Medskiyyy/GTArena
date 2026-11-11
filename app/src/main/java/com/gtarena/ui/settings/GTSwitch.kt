@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.disabled
@@ -28,23 +29,29 @@ import androidx.compose.ui.unit.sp
 import com.gtarena.ui.theme.GaugeTick
 import com.gtarena.ui.theme.GaugeTrack
 import com.gtarena.ui.theme.OnLime
+import com.gtarena.ui.theme.SlantShape
 import com.gtarena.ui.theme.TextPrimary
 import com.gtarena.ui.theme.TextSecondary
 
+private val SwitchShape = SlantShape(6.dp)
+private val ThumbShape = SlantShape(4.dp)
+
 @Composable
 fun GTSwitch(checked: Boolean, accent: Color, modifier: Modifier = Modifier) {
-    val thumbX = animateDpAsState(if (checked) 23.dp else 3.dp, label = "thumb")
+    val thumbX = animateDpAsState(if (checked) 23.dp else 5.dp, label = "thumb")
     Box(
         modifier = modifier
-            .size(width = 44.dp, height = 24.dp)
+            .size(width = 46.dp, height = 24.dp)
+            .clip(SwitchShape)
             .background(if (checked) accent else GaugeTrack)
-            .then(if (checked) Modifier else Modifier.border(1.dp, GaugeTick))
+            .then(if (checked) Modifier else Modifier.border(1.dp, GaugeTick, SwitchShape))
     ) {
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .offset(x = thumbX.value)
                 .size(18.dp)
+                .clip(ThumbShape)
                 .background(if (checked) OnLime else TextSecondary)
         )
     }

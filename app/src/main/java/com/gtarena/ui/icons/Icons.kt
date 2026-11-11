@@ -177,6 +177,41 @@ object GTIcons {
         }
     }
 
+    val Crosshair: ImageVector by lazy {
+        strokeIcon("Crosshair") {
+            moveTo(12f, 3f); verticalLineTo(8f)
+            moveTo(12f, 16f); verticalLineTo(21f)
+            moveTo(3f, 12f); horizontalLineTo(8f)
+            moveTo(16f, 12f); horizontalLineTo(21f)
+            moveTo(11f, 12f); horizontalLineTo(13f)
+        }
+    }
+
+    val Camera: ImageVector by lazy {
+        strokeIcon("Camera") {
+            moveTo(4f, 7f); horizontalLineTo(8f); lineTo(10f, 5f); horizontalLineTo(14f); lineTo(16f, 7f)
+            horizontalLineTo(20f); verticalLineTo(19f); horizontalLineTo(4f)
+            close()
+            moveTo(15f, 13f)
+            arcTo(3f, 3f, 0f, isMoreThanHalf = true, isPositiveArc = true, 9f, 13f)
+            arcTo(3f, 3f, 0f, isMoreThanHalf = true, isPositiveArc = true, 15f, 13f)
+            close()
+        }
+    }
+
+    val Record: ImageVector by lazy {
+        strokeIcon("Record") {
+            moveTo(20f, 12f)
+            arcTo(8f, 8f, 0f, isMoreThanHalf = true, isPositiveArc = true, 4f, 12f)
+            arcTo(8f, 8f, 0f, isMoreThanHalf = true, isPositiveArc = true, 20f, 12f)
+            close()
+            moveTo(14.5f, 12f)
+            arcTo(2.5f, 2.5f, 0f, isMoreThanHalf = true, isPositiveArc = true, 9.5f, 12f)
+            arcTo(2.5f, 2.5f, 0f, isMoreThanHalf = true, isPositiveArc = true, 14.5f, 12f)
+            close()
+        }
+    }
+
     private fun strokeIcon(name: String, block: PathBuilder.() -> Unit): ImageVector =
         ImageVector.Builder(
             name = name,

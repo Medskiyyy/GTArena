@@ -34,7 +34,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-data class GameSession(val pkg: String, val label: String, val profile: Profile, val bypass: Boolean = false)
+data class GameSession(
+    val pkg: String,
+    val label: String,
+    val profile: Profile,
+    val bypass: Boolean = false,
+    val refreshHz: Int = 120
+)
 
 class ArenaService : LifecycleService() {
 
@@ -46,7 +52,7 @@ class ArenaService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         settings = SettingsStore.get(this)
-        controller = OverlayController(this, { switchProfile(it) }, { switchBypass(it) })
+        controller = OverlayController(this, { switchProfile(it) }, { switchBypass(it) }, { switchRefresh(it) })
         _running.value = true
         createChannel()
         ServiceCompat.startForeground(
@@ -109,7 +115,7 @@ class ArenaService : LifecycleService() {
         if (!settings.autoApply.value) return
         val label = gameLabel(pkg) ?: return
         val cfg = settings.gameConfig(pkg)
-        _session.value = GameSession(pkg, label, cfg.profile, cfg.bypassCharge)
+        _session.value = GameSession(pkg, label, cfg.profile, cfg.bypassCharge, cfg.refreshHz)
         applyLocked(cfg.profile, cfg.refreshHz, cfg.bypassCharge)
         if (cfg.focus) FocusMode.enable()
     }
@@ -124,7 +130,7 @@ class ArenaService : LifecycleService() {
         lifecycleScope.launch {
             val s = _session.value ?: return@launch
             _session.value = s.copy(profile = profile)
-            applyLocked(profile, settings.gameConfig(s.pkg).refreshHz, s.bypass)
+            applyLocked(profile, s.refreshHz, s.bypass)
         }
     }
 
@@ -132,7 +138,15 @@ class ArenaService : LifecycleService() {
         lifecycleScope.launch {
             val s = _session.value ?: return@launch
             _session.value = s.copy(bypass = on)
-            applyLocked(s.profile, settings.gameConfig(s.pkg).refreshHz, on)
+            applyLocked(s.profile, s.refreshHz, on)
+        }
+    }
+
+    private fun switchRefresh(hz: Int) {
+        lifecycleScope.launch {
+            val s = _session.value ?: return@launch
+            _session.value = s.copy(refreshHz = hz)
+            applyLocked(s.profile, hz, s.bypass)
         }
     }
 

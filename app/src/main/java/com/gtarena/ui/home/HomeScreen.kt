@@ -18,9 +18,9 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -33,21 +33,17 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gtarena.model.GameEntry
 import com.gtarena.model.HomeState
 import com.gtarena.model.Profile
-import com.gtarena.model.label
 import com.gtarena.model.sampleHomeState
-import com.gtarena.ui.home.components.GameRow
+import com.gtarena.ui.home.components.GameCard
+import com.gtarena.ui.home.components.HeroPanel
+import com.gtarena.ui.home.components.LoadRow
 import com.gtarena.ui.home.components.ProfileSelector
-import com.gtarena.ui.home.components.TelemetryItem
-import com.gtarena.ui.home.components.TelemetryStrip
-import com.gtarena.ui.home.components.TempGauge
 import com.gtarena.ui.icons.GTIcons
 import com.gtarena.ui.intro.IntroTiming
 import com.gtarena.ui.intro.LocalIntro
@@ -55,16 +51,15 @@ import com.gtarena.ui.intro.Wordmark
 import com.gtarena.ui.intro.introEnter
 import com.gtarena.ui.theme.GTArenaTheme
 import com.gtarena.ui.theme.Ground
+import com.gtarena.ui.theme.Label
 import com.gtarena.ui.theme.ProfileGaming
 import com.gtarena.ui.theme.ProfileHemat
 import com.gtarena.ui.theme.ProfileSeimbang
+import com.gtarena.ui.theme.SectionTitle
 import com.gtarena.ui.theme.TextPrimary
-import com.gtarena.ui.theme.TextSecondary
+import com.gtarena.ui.theme.TextSoft
 import com.gtarena.ui.theme.Warn
 import com.gtarena.ui.theme.color
-import java.util.Locale
-
-private val IdLocale: Locale = Locale.forLanguageTag("id-ID")
 
 @Composable
 fun HomeScreen(
@@ -76,6 +71,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val accent = state.profile.color
+    val side = Modifier.padding(horizontal = 20.dp)
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -84,9 +80,10 @@ fun HomeScreen(
     ) {
         LazyColumn(
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 16.dp)) {
+            contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
+        ) {
             item {
-                Header(onOpenSettings = onOpenSettings, modifier = Modifier.padding(bottom = 14.dp))
+                Header(onOpenSettings = onOpenSettings, modifier = side.padding(bottom = 10.dp))
             }
             if (!state.rootOk) {
                 item {
@@ -94,43 +91,49 @@ fun HomeScreen(
                         text = "Root mati. Profil nggak bisa diterapin.",
                         color = Warn,
                         fontSize = 13.sp,
-                        modifier = Modifier.padding(bottom = 14.dp)
+                        modifier = side.padding(bottom = 10.dp)
                     )
                 }
             }
             item {
-                GaugeRow(state, accent, modifier = Modifier.padding(bottom = 14.dp))
+                HeroPanel(state = state, modifier = side.padding(bottom = 10.dp))
             }
             item {
                 ProfileSelector(
                     selected = state.profile,
                     onSelected = onProfileSelected,
-                    modifier = Modifier.padding(bottom = 14.dp)
+                    showDescription = false,
+                    modifier = side.padding(bottom = 10.dp)
                 )
             }
             item {
-                TelemetryStrip(telemetryItems(state), modifier = Modifier.padding(bottom = 14.dp))
+                LoadRow(stats = state.stats, accent = accent, modifier = side.padding(bottom = 14.dp))
             }
             item {
                 GameHeader(
                     count = state.games.size,
+                    accent = accent,
                     onSeeAll = onSeeAllGames,
-                    modifier = Modifier.introEnter(IntroTiming.GAME_HEADER_START, IntroTiming.GAME_DUR, dx = 16.dp)
+                    modifier = side.introEnter(IntroTiming.GAME_HEADER_START, IntroTiming.GAME_DUR, dx = 16.dp)
                 )
             }
-            itemsIndexed(state.games.take(3), key = { _, game -> game.pkg }) { index, game ->
-                GameRow(
-                    game = game,
-                    accent = accent,
-                    primary = index == 0,
-                    showDivider = index < minOf(state.games.size, 3) - 1,
-                    onLaunch = { onLaunchGame(game) },
-                    modifier = Modifier.introEnter(
-                        IntroTiming.GAME_ROW_START + IntroTiming.GAME_STEP * index,
-                        IntroTiming.GAME_DUR,
-                        dx = 16.dp
-                    )
-                )
+            item {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    itemsIndexed(state.games.take(8), key = { _, game -> game.pkg }) { index, game ->
+                        GameCard(
+                            game = game,
+                            onLaunch = { onLaunchGame(game) },
+                            modifier = Modifier.introEnter(
+                                IntroTiming.GAME_ROW_START + IntroTiming.GAME_STEP * minOf(index, 3),
+                                IntroTiming.GAME_DUR,
+                                dx = 16.dp
+                            )
+                        )
+                    }
+                }
             }
         }
     }
@@ -194,96 +197,25 @@ private fun Emblem() {
 }
 
 @Composable
-private fun SideStat(value: String, label: String, align: TextAlign, index: Int) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .introEnter(IntroTiming.STAT_START + IntroTiming.STAT_STEP * index, IntroTiming.STAT_DUR, dy = 12.dp)
-    ) {
-        Text(
-            text = value,
-            color = TextPrimary,
-            fontSize = 26.sp,
-            lineHeight = 29.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = align,
-            maxLines = 1,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Text(
-            text = label,
-            color = TextSecondary,
-            fontSize = 13.sp,
-            textAlign = align,
-            maxLines = 1,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-private fun GaugeRow(state: HomeState, accent: Color, modifier: Modifier = Modifier) {
-    val stats = state.stats
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(204.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
-        ) {
-            SideStat("${stats.batteryTempC}°", "Baterai", TextAlign.Start, 0)
-            SideStat("${stats.batteryPct}%", "Daya", TextAlign.Start, 1)
-        }
-        TempGauge(tempC = stats.cpuTempC, accent = accent, profileName = state.profile.label)
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
-        ) {
-            SideStat("${stats.refreshHz}", "Hz layar", TextAlign.End, 2)
-            SideStat(String.format(IdLocale, "%.1f", stats.ramUsedGb), "GB RAM", TextAlign.End, 3)
-        }
-    }
-}
-
-private fun telemetryItems(state: HomeState): List<TelemetryItem> {
-    val stats = state.stats
-    return listOf(
-        TelemetryItem("CPU besar", String.format(IdLocale, "%.2f", stats.bigCoreGhz), "GHz"),
-        TelemetryItem("Beban GPU", "${stats.gpuLoadPct}", "%"),
-        TelemetryItem("Cas", if (stats.charging) "Ngecas" else "Lepas")
-    )
-}
-
-@Composable
-private fun GameHeader(count: Int, onSeeAll: () -> Unit, modifier: Modifier = Modifier) {
+private fun GameHeader(count: Int, accent: Color, onSeeAll: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = "GAME",
-            color = TextPrimary,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 1.sp
-        )
+        SectionTitle(text = "Game", accent = accent)
         Box(
             modifier = Modifier
                 .heightIn(min = 44.dp)
                 .clickable(role = Role.Button, onClick = onSeeAll),
             contentAlignment = Alignment.CenterEnd
         ) {
-            Text(text = "Semua ($count)", color = TextPrimary, fontSize = 14.sp)
+            Label(text = "Semua ($count)", color = TextSoft, fontSize = 12.sp)
         }
     }
 }
 
-@Preview(widthDp = 390, heightDp = 844, showBackground = true, backgroundColor = 0xFF0A0B0D)
+@Preview(widthDp = 360, heightDp = 800, showBackground = true, backgroundColor = 0xFF060607)
 @Composable
 private fun HomeScreenPreview() {
     GTArenaTheme {

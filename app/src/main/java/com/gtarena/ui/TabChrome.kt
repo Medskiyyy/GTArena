@@ -8,14 +8,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.gtarena.ui.theme.TextPrimary
+import com.gtarena.ui.theme.SectionTitle
 
 enum class AppTab { ARENA, GAME, OVERLAY, SETELAN }
 
@@ -31,12 +29,6 @@ fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
             .height(44.dp),
         contentAlignment = Alignment.CenterStart
     ) {
-        Text(
-            text = text,
-            color = TextPrimary,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 2.sp
-        )
+        SectionTitle(text = text, fontSize = 20.sp)
     }
 }
