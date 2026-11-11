@@ -22,11 +22,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.gtarena.data.SettingsStore
 import com.gtarena.service.ArenaService
 import com.gtarena.ui.games.GameTab
 import com.gtarena.ui.home.HomeScreen
@@ -34,6 +36,7 @@ import com.gtarena.ui.home.HomeViewModel
 import com.gtarena.ui.home.components.BottomNav
 import com.gtarena.ui.intro.IntroGate
 import com.gtarena.ui.intro.IntroOverlay
+import com.gtarena.ui.intro.IntroSound
 import com.gtarena.ui.intro.IntroState
 import com.gtarena.ui.intro.LocalIntro
 import com.gtarena.ui.overlay.OverlayTab
@@ -57,8 +60,10 @@ fun AppRoot(vm: HomeViewModel = viewModel()) {
         IntroState((introRun > 0 || !introSeen) && tab == AppTab.ARENA && IntroGate.animationsOn())
     }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     LaunchedEffect(intro) {
         introSeen = true
+        if (intro.enabled && SettingsStore.get(context).introSound.value) IntroSound.play(context)
         intro.play()
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -103,7 +108,10 @@ fun AppRoot(vm: HomeViewModel = viewModel()) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
-                        if (event.changes.any { it.changedToDown() }) scope.launch { intro.skip() }
+                        if (event.changes.any { it.changedToDown() }) {
+                            if (!intro.logoShown) IntroSound.stop()
+                            scope.launch { intro.skip() }
+                        }
                     }
                 }
             }
@@ -115,6 +123,11 @@ fun AppRoot(vm: HomeViewModel = viewModel()) {
                             state = state,
                             onProfileSelected = vm::selectProfile,
                             onLaunchGame = vm::launch,
+                            onEditGame = {
+                                adding = false
+                                editingPkg = it.pkg
+                                tab = AppTab.GAME
+                            },
                             onOpenSettings = { tab = AppTab.SETELAN },
                             onSeeAllGames = { tab = AppTab.GAME }
                         )

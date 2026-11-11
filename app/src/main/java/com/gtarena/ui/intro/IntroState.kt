@@ -24,11 +24,15 @@ import kotlinx.coroutines.withContext
 
 object IntroTiming {
     const val TOTAL = 3000f
-    const val BAR_STAGGER = 112f
-    const val BAR_DUR = 500f
-    const val WIPE_START = 720f
-    const val WIPE_END = 1360f
-    const val LINE_RETRACT_END = 2050f
+    const val BLADE_STAGGER = 130f
+    const val BLADE_DUR = 760f
+    const val SPIN_END = 1150f
+    const val MERGE_START = 900f
+    const val MERGE_END = 1200f
+    const val PULSE_START = 1020f
+    const val PULSE_END = 1620f
+    const val WIPE_START = 1080f
+    const val WIPE_END = 1560f
     const val HANDOFF_START = 1810f
     const val HANDOFF_END = 2290f
     const val RING_START = 1890f

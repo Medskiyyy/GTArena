@@ -42,6 +42,7 @@ fun SettingsTab(accent: Color, modifier: Modifier = Modifier) {
     val store = remember { SettingsStore.get(context) }
     val autoApply by store.autoApply.collectAsStateWithLifecycle()
     val overlay by store.overlayEnabled.collectAsStateWithLifecycle()
+    val introSound by store.introSound.collectAsStateWithLifecycle()
     val running by ArenaService.running.collectAsStateWithLifecycle()
     val root by produceState<Boolean?>(initialValue = null) { value = RootShell.isAvailable() }
     val version = remember { appVersion(context) }
@@ -107,6 +108,22 @@ fun SettingsTab(accent: Color, modifier: Modifier = Modifier) {
                 checked = overlay,
                 accent = accent,
                 onCheckedChange = store::setOverlayEnabled,
+                showDivider = false
+            )
+        }
+        Label(text = "Tampilan", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .mechaPanel(PanelShape)
+                .padding(horizontal = 16.dp)
+        ) {
+            SettingRow(
+                title = "Suara intro",
+                caption = "Efek suara pas animasi pembuka. Ngikutin volume media.",
+                checked = introSound,
+                accent = accent,
+                onCheckedChange = store::setIntroSound,
                 showDivider = false
             )
         }

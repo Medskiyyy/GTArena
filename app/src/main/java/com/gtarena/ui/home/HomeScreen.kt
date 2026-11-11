@@ -45,6 +45,7 @@ import com.gtarena.ui.home.components.HeroPanel
 import com.gtarena.ui.home.components.LoadRow
 import com.gtarena.ui.home.components.ProfileSelector
 import com.gtarena.ui.icons.GTIcons
+import com.gtarena.ui.intro.Emblem
 import com.gtarena.ui.intro.IntroTiming
 import com.gtarena.ui.intro.LocalIntro
 import com.gtarena.ui.intro.Wordmark
@@ -66,6 +67,7 @@ fun HomeScreen(
     state: HomeState,
     onProfileSelected: (Profile) -> Unit,
     onLaunchGame: (GameEntry) -> Unit,
+    onEditGame: (GameEntry) -> Unit,
     onOpenSettings: () -> Unit,
     onSeeAllGames: () -> Unit,
     modifier: Modifier = Modifier
@@ -83,7 +85,7 @@ fun HomeScreen(
             contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
         ) {
             item {
-                Header(onOpenSettings = onOpenSettings, modifier = side.padding(bottom = 10.dp))
+                Header(accent = accent, onOpenSettings = onOpenSettings, modifier = side.padding(bottom = 10.dp))
             }
             if (!state.rootOk) {
                 item {
@@ -126,6 +128,7 @@ fun HomeScreen(
                         GameCard(
                             game = game,
                             onLaunch = { onLaunchGame(game) },
+                            onEdit = { onEditGame(game) },
                             modifier = Modifier.introEnter(
                                 IntroTiming.GAME_ROW_START + IntroTiming.GAME_STEP * minOf(index, 3),
                                 IntroTiming.GAME_DUR,
@@ -140,7 +143,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Header(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
+private fun Header(accent: Color, onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
     val intro = LocalIntro.current
     Row(
         modifier = modifier
@@ -156,7 +159,7 @@ private fun Header(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Emblem()
+            Emblem(accent)
             Wordmark()
         }
         Box(
@@ -171,27 +174,6 @@ private fun Header(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
                 tint = TextPrimary,
                 modifier = Modifier.size(22.dp)
             )
-        }
-    }
-}
-
-@Composable
-private fun Emblem() {
-    Canvas(modifier = Modifier.size(width = 21.dp, height = 20.dp)) {
-        val barW = 5.dp.toPx()
-        val gap = 3.dp.toPx()
-        val h = 20.dp.toPx()
-        val shift = (h / 2f) * 0.3249197f
-        listOf(ProfileHemat, ProfileSeimbang, ProfileGaming).forEachIndexed { i, color ->
-            val x = i * (barW + gap)
-            val path = Path().apply {
-                moveTo(x + shift, 0f)
-                lineTo(x + barW + shift, 0f)
-                lineTo(x + barW - shift, h)
-                lineTo(x - shift, h)
-                close()
-            }
-            drawPath(path, color)
         }
     }
 }
@@ -223,6 +205,7 @@ private fun HomeScreenPreview() {
             state = sampleHomeState,
             onProfileSelected = {},
             onLaunchGame = {},
+            onEditGame = {},
             onOpenSettings = {},
             onSeeAllGames = {}
         )
