@@ -187,6 +187,22 @@ class OverlayController(
         }
     }
 
+    fun warmUp() {
+        if (!Settings.canDrawOverlays(context) || splash != null) return
+        try {
+            val wctx = overlayContext()
+            val manager = wctx.getSystemService(WindowManager::class.java)
+            val lp = baseParams(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+            lp.width = 1
+            lp.height = 1
+            lp.alpha = 0f
+            splashWm = manager
+            splash = addWindow(lp, wctx, manager) { OverlaySplash(Profile.SEIMBANG) { removeSplash() } }
+        } catch (e: Exception) {
+            removeSplash()
+        }
+    }
+
     private fun removeSplash() {
         val window = splash ?: return
         try {

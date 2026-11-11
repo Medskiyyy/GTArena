@@ -9,6 +9,8 @@ object ForegroundAppWatcher {
         "dumpsys activity activities | grep -m1 -E \"topResumedActivity|ResumedActivity\""
     private val RECORD = Regex("""ActivityRecord\{[0-9a-fA-F]+ u\d+ ([A-Za-z0-9_.]+)/""")
 
+    suspend fun current(): String? = RootShell.run(CMD)?.let { parsePackage(it) }
+
     fun foregroundPackage(periodMs: Long = 2000): Flow<String> = flow {
         var last: String? = null
         while (true) {

@@ -19,6 +19,7 @@ import com.gtarena.R
 import com.gtarena.data.FocusMode
 import com.gtarena.data.ForegroundAppWatcher
 import com.gtarena.data.GameRepository
+import com.gtarena.data.LaunchWatcher
 import com.gtarena.data.ProfileEngine
 import com.gtarena.data.SettingsStore
 import com.gtarena.model.Profile
@@ -53,11 +54,15 @@ class ArenaService : LifecycleService() {
     private val sessionLock = Mutex()
     private val games = HashMap<String, String>()
 
+    @Volatile
+    private var gamePkgs: Set<String> = emptySet()
+
     override fun onCreate() {
         super.onCreate()
         settings = SettingsStore.get(this)
         controller = OverlayController(this, { switchProfile(it) }, { switchBypass(it) }, { switchRefresh(it) }, { switchThermal(it) })
         _running.value = true
+        controller.warmUp()
         createChannel()
         ServiceCompat.startForeground(
             this,
@@ -94,7 +99,13 @@ class ArenaService : LifecycleService() {
         lifecycleScope.launch {
             combine(settings.extraGames, settings.autoApply) { _, auto -> auto }.collect { auto ->
                 val pkgs = if (auto) GameRepository(this@ArenaService).installedGames().map { it.pkg } else emptyList()
+                gamePkgs = pkgs.toSet()
                 ProfileEngine.writeGames(pkgs)
+            }
+        }
+        lifecycleScope.launch {
+            LaunchWatcher.launches().collect { pkg ->
+                if (pkg in gamePkgs && _session.value?.pkg != pkg) announce(pkg)
             }
         }
     }
@@ -106,11 +117,19 @@ class ArenaService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         val game = intent?.getStringExtra(EXTRA_GAME)
-        if (game != null && settings.autoApply.value) {
-            controller.splash(game, settings.gameConfig(game).profile)
-            if (!_uiVisible.value) lifecycleScope.launch { handleForeground(game) }
-        }
+        if (game != null && settings.autoApply.value) announce(game)
         return START_STICKY
+    }
+
+    private fun announce(game: String) {
+        controller.splash(game, settings.gameConfig(game).profile)
+        lifecycleScope.launch {
+            delay(SPLASH_HEAD_START_MS)
+            handleForeground(game)
+            delay(CONFIRM_MS)
+            val top = ForegroundAppWatcher.current()
+            if (top != null && top != game && _session.value?.pkg == game) handleForeground(top)
+        }
     }
 
     override fun onDestroy() {
@@ -236,6 +255,8 @@ class ArenaService : LifecycleService() {
         private const val EXTRA_GAME = "game"
         private const val NOTIFICATION_ID = 1
         private const val HEARTBEAT_MS = 10_000L
+        private const val CONFIRM_MS = 4_000L
+        private const val SPLASH_HEAD_START_MS = 450L
         private val THERMAL_GUARD_C = intArrayOf(0, 46, 50)
         private val IGNORED = setOf("com.android.systemui", "android")
 
