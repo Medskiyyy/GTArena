@@ -5,12 +5,13 @@ import android.media.MediaScannerConnection
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 object GameTools {
-    private const val SHOTS = "/sdcard/Pictures/Screenshots"
     private const val MOVIES = "/sdcard/Movies"
+    private const val SCREENSHOT_SETTLE_MS = 800L
     const val RECORD_LIMIT_S = 180
 
     private val _recording = MutableStateFlow(false)
@@ -19,10 +20,9 @@ object GameTools {
 
     private fun stamp(): String = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
 
-    suspend fun screenshot(context: Context): Boolean {
-        val path = "$SHOTS/GTArena_${stamp()}.png"
-        val ok = RootShell.run("mkdir -p $SHOTS && screencap -p $path") != null
-        if (ok) MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
+    suspend fun screenshot(): Boolean {
+        val ok = RootShell.run("input keyevent KEYCODE_SYSRQ") != null
+        delay(SCREENSHOT_SETTLE_MS)
         return ok
     }
 

@@ -44,15 +44,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,6 +66,7 @@ import com.gtarena.ui.theme.AppIcon
 import com.gtarena.ui.theme.BevelBrush
 import com.gtarena.ui.theme.ChamferShape
 import com.gtarena.ui.theme.Label
+import com.gtarena.ui.theme.OnLime
 import com.gtarena.ui.theme.PanelBrush
 import com.gtarena.ui.theme.Saira
 import com.gtarena.ui.theme.SairaCond
@@ -79,13 +78,12 @@ import com.gtarena.ui.theme.TextSoft
 import com.gtarena.ui.theme.color
 import com.gtarena.ui.theme.mechaPanel
 import com.gtarena.ui.theme.textOnDark
-import kotlin.math.max
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal const val PANEL_WIDTH_DP = 324
-internal const val PANEL_HEIGHT_DP = 350
+internal const val PANEL_HEIGHT_DP = 300
 internal const val HANDLE_WIDTH_DP = 14
 internal const val HANDLE_HEIGHT_DP = 56
 
@@ -121,7 +119,7 @@ private fun AppStrip(apps: List<String>, onOpen: (String) -> Unit) {
             AppIcon(
                 pkg = pkg,
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(32.dp)
                     .clip(AppShape)
                     .clickable(role = Role.Button, onClickLabel = "Buka melayang") { onOpen(pkg) }
             )
@@ -141,6 +139,7 @@ internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
     val scope = rememberCoroutineScope()
     var stats by remember { mutableStateOf<DeviceStats?>(null) }
     var brightness by remember { mutableStateOf<Float?>(null) }
+    var adjustBrightness by remember { mutableStateOf(false) }
     val focusOn by FocusMode.enabled.collectAsState()
     val brightnessLocked by FocusMode.brightnessLocked.collectAsState()
     val recording by GameTools.recording.collectAsState()
@@ -161,17 +160,11 @@ internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
                 .width(PANEL_WIDTH_DP.dp)
                 .mechaPanel(PanelShape, accent)
                 .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             PanelHeader(label = session.label, start = state.sessionStart, accent = accent)
             if (apps.isNotEmpty()) AppStrip(apps = apps, onOpen = actions.onOpenApp)
-            FpsRow(fps = state.fps, hz = stats?.refreshHz, samples = state.samples, accent = session.profile.textOnDark)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                val s = stats
-                StatCell("CPU", s?.let { "${it.cpuTempC}°" }, (s?.cpuTempC ?: 0) / 95f, accent, Modifier.weight(1f), redFrom = 85f / 95f)
-                StatCell("GPU", s?.let { "${it.gpuLoadPct}%" }, (s?.gpuLoadPct ?: 0) / 100f, accent, Modifier.weight(1f))
-                StatCell("Baterai", s?.let { "${it.batteryTempC}°" }, ((s?.batteryTempC ?: 20) - 20) / 30f, accent, Modifier.weight(1f), redFrom = 0.8f)
-            }
+            HeroRow(fps = state.fps, stats = stats, accent = accent, fpsColor = session.profile.textOnDark)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -185,18 +178,18 @@ internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
                         color = p.color,
                         onClick = { actions.onProfile(p) },
                         modifier = Modifier.weight(1f),
-                        height = 36.dp,
+                        height = 34.dp,
                         fontSize = 13.sp
                     )
                 }
             }
-            BrightnessRow(
+            if (adjustBrightness) BrightnessRow(
                 percent = brightness,
                 accent = accent,
                 onChange = { brightness = it },
-                onCommit = { scope.launch { GameTools.setBrightness(it) } }
-            )
-            Row(
+                onCommit = { scope.launch { GameTools.setBrightness(it) } },
+                onDone = { adjustBrightness = false }
+            ) else Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
@@ -204,6 +197,7 @@ internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
             ) {
                 Tile("Bubble FPS", state.bubble, accent, { actions.onBubble(!state.bubble) }, icon = GTIcons.Arena)
                 Tile("Crosshair", state.crosshair, accent, { actions.onCrosshair(!state.crosshair) }, icon = GTIcons.Crosshair)
+                Tile("Terang", false, accent, { adjustBrightness = true }, glyph = brightness?.let { "${it.toInt()}%" } ?: "--")
                 Tile(
                     "Hz maks", false, accent,
                     {
@@ -356,107 +350,81 @@ private fun PanelHeader(label: String, start: Long, accent: Color) {
 }
 
 @Composable
-private fun FpsRow(fps: Int?, hz: Int?, samples: List<Int>, accent: Color) {
+private fun HeroRow(fps: Int?, stats: DeviceStats?, accent: Color, fpsColor: Color) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp),
-        verticalAlignment = Alignment.Bottom
+            .height(64.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = fps?.toString() ?: "--",
-            color = accent,
-            fontSize = 40.sp,
-            lineHeight = 48.sp,
-            fontWeight = FontWeight.ExtraBold,
-            maxLines = 1
-        )
-        Column(modifier = Modifier.padding(start = 8.dp, bottom = 10.dp)) {
-            Label("FPS", color = TextPrimary, fontSize = 12.sp)
-            Label("Layar ${hz ?: "--"} Hz", fontSize = 10.sp)
-        }
-        Sparkline(
-            samples = samples,
-            color = accent,
-            modifier = Modifier
-                .padding(start = 14.dp, bottom = 10.dp)
-                .weight(1f)
-                .height(38.dp)
-        )
-    }
-}
-
-@Composable
-private fun Sparkline(samples: List<Int>, color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val base = size.height
-        drawLine(Color(0x33FFFFFF), Offset(0f, base), Offset(size.width, base), strokeWidth = 1.dp.toPx())
-        if (samples.size < 2) return@Canvas
-        val ceiling = max(60, samples.max()).toFloat() * 1.1f
-        val step = size.width / 39f
-        val line = Path()
-        val first = (40 - samples.size) * step
-        samples.forEachIndexed { i, v ->
-            val x = first + i * step
-            val y = base * (1f - v.coerceAtLeast(0) / ceiling)
-            if (i == 0) line.moveTo(x, y) else line.lineTo(x, y)
-        }
-        val fill = Path().apply {
-            addPath(line)
-            lineTo(size.width, base)
-            lineTo(first, base)
-            close()
-        }
-        drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.38f), Color.Transparent)))
-        drawPath(line, color, style = Stroke(width = 1.5.dp.toPx(), join = StrokeJoin.Miter))
-    }
-}
-
-@Composable
-private fun StatCell(
-    label: String,
-    value: String?,
-    fraction: Float,
-    accent: Color,
-    modifier: Modifier = Modifier,
-    redFrom: Float = 2f
-) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Label(label, fontSize = 10.sp, modifier = Modifier.padding(bottom = 2.dp))
+        Column(modifier = Modifier.width(96.dp)) {
             Text(
-                text = value ?: "--",
-                color = TextPrimary,
-                fontSize = 16.sp,
-                lineHeight = 20.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
+                text = fps?.toString() ?: "--",
+                color = fpsColor,
+                fontSize = 40.sp,
+                lineHeight = 44.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                modifier = Modifier.height(46.dp)
             )
+            Label("FPS · ${stats?.refreshHz ?: "--"} Hz", fontSize = 10.sp, modifier = Modifier.height(14.dp))
         }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            val s = stats
+            MiniStat("CPU", s?.let { "${it.cpuTempC}°" }, (s?.cpuTempC ?: 0) / 95f, accent, redFrom = 85f / 95f)
+            MiniStat("GPU", s?.let { "${it.gpuLoadPct}%" }, (s?.gpuLoadPct ?: 0) / 100f, accent)
+            MiniStat("Bat", s?.let { "${it.batteryTempC}°" }, ((s?.batteryTempC ?: 20) - 20) / 30f, accent, redFrom = 0.8f)
+        }
+    }
+}
+
+@Composable
+private fun MiniStat(label: String, value: String?, fraction: Float, accent: Color, redFrom: Float = 2f) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Label(label, fontSize = 10.sp, modifier = Modifier.width(28.dp))
         SegBar(
             fraction = fraction,
             color = accent,
-            segments = 12,
+            segments = 14,
             redFrom = redFrom,
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .height(5.dp)
+        )
+        Text(
+            text = value ?: "--",
+            color = TextPrimary,
+            fontSize = 13.sp,
+            lineHeight = 16.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(36.dp)
         )
     }
 }
 
 @Composable
-private fun BrightnessRow(percent: Float?, accent: Color, onChange: (Float) -> Unit, onCommit: (Float) -> Unit) {
+private fun BrightnessRow(
+    percent: Float?,
+    accent: Color,
+    onChange: (Float) -> Unit,
+    onCommit: (Float) -> Unit,
+    onDone: () -> Unit
+) {
     val change by rememberUpdatedState(onChange)
     val commit by rememberUpdatedState(onCommit)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(26.dp),
+            .height(54.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -502,6 +470,16 @@ private fun BrightnessRow(percent: Float?, accent: Color, onChange: (Float) -> U
             maxLines = 1,
             modifier = Modifier.width(34.dp)
         )
+        Box(
+            modifier = Modifier
+                .size(width = 52.dp, height = 40.dp)
+                .clip(TileShape)
+                .background(accent)
+                .clickable(role = Role.Button, onClick = onDone),
+            contentAlignment = Alignment.Center
+        ) {
+            Label("OK", color = OnLime, fontSize = 12.sp)
+        }
     }
 }
 

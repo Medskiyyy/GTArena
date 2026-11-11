@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -38,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
@@ -81,6 +83,9 @@ private val RailShape = ChamferShape(12.dp)
 private val FlyoutShape = ChamferShape(10.dp)
 private val ButtonShape = ChamferShape(6.dp)
 private val SlashShape = SlantShape(2.dp)
+private const val APP_LIST_MAX_DP = 236
+private const val SIDEBAR_HANDLE_W_DP = 22
+private const val SIDEBAR_HANDLE_H_DP = 96
 
 internal class SidebarUiState {
     var expanded by mutableStateOf(false)
@@ -150,6 +155,7 @@ class SidebarController(private val context: Context) {
             ui.expanded = false
             window = addOverlayWindow(wctx, manager, lp) { SidebarRoot(ui, actions) }.also {
                 it.view.setOnTouchListener(touchListener())
+                excludeSystemGestures(it.view)
             }
         } catch (e: Exception) {
             hide()
@@ -191,7 +197,7 @@ class SidebarController(private val context: Context) {
         view.visibility = View.INVISIBLE
         scope?.launch {
             delay(400L)
-            GameTools.screenshot(context)
+            GameTools.screenshot()
             view.visibility = View.VISIBLE
         }
     }
@@ -200,6 +206,7 @@ class SidebarController(private val context: Context) {
         val slop = ViewConfiguration.get(context).scaledTouchSlop
         var downX = 0f
         var downY = 0f
+        var startX = 0
         var startY = 0
         var dragging = false
         return View.OnTouchListener { v, e ->
@@ -209,19 +216,25 @@ class SidebarController(private val context: Context) {
                 if (e.actionMasked == MotionEvent.ACTION_OUTSIDE) setExpanded(false)
                 return@OnTouchListener false
             }
+            val bounds = manager.currentWindowMetrics.bounds
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = e.rawX
                     downY = e.rawY
+                    startX = if (ui.onEnd) bounds.width() - v.width else 0
                     startY = lp.y
                     dragging = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    val dx = e.rawX - downX
                     val dy = e.rawY - downY
-                    if (!dragging && hypot(e.rawX - downX, dy) > slop) dragging = true
+                    if (!dragging && hypot(dx, dy) > slop) {
+                        dragging = true
+                        lp.gravity = Gravity.TOP or Gravity.START
+                    }
                     if (dragging) {
-                        val bounds = manager.currentWindowMetrics.bounds
+                        lp.x = (startX + dx).toInt().coerceIn(0, max(0, bounds.width() - v.width))
                         lp.y = (startY + dy).toInt().coerceIn(0, max(0, bounds.height() - v.height))
                         handleFrac = lp.y / bounds.height().toFloat()
                         manager.updateViewLayout(v, lp)
@@ -268,7 +281,7 @@ class SidebarController(private val context: Context) {
 
     private fun handleY(manager: WindowManager): Int {
         val height = manager.currentWindowMetrics.bounds.height()
-        return (height * handleFrac).toInt().coerceIn(0, max(0, height - dp(HANDLE_HEIGHT_DP)))
+        return (height * handleFrac).toInt().coerceIn(0, max(0, height - dp(SIDEBAR_HANDLE_H_DP)))
     }
 
     private fun dp(value: Int): Int = (value * density).toInt()
@@ -281,7 +294,7 @@ private fun SidebarRoot(state: SidebarUiState, actions: SidebarActions) {
     val profile by store.profile.collectAsState()
     val accent = profile.color
     if (!state.expanded) {
-        OverlayHandle(accent = accent, onEnd = state.onEnd)
+        SidebarHandle(accent = accent, onEnd = state.onEnd)
         return
     }
     val apps by store.sidebarApps.collectAsState()
@@ -306,13 +319,11 @@ private fun Rail(
     accent: Color,
     actions: SidebarActions
 ) {
-    val maxHeight = LocalConfiguration.current.screenHeightDp.dp - 48.dp
     Column(
         modifier = Modifier
             .width(64.dp)
-            .heightIn(max = maxHeight)
             .mechaPanel(RailShape, accent)
-            .padding(vertical = 14.dp),
+            .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -320,16 +331,15 @@ private fun Rail(
             listOf(1f, 0.6f, 0.3f).forEach {
                 Box(
                     Modifier
-                        .size(width = 6.dp, height = 10.dp)
+                        .size(width = 5.dp, height = 10.dp)
                         .clip(SlashShape)
                         .background(accent.copy(alpha = it))
                 )
             }
         }
-        Label("Melayang", fontSize = 9.sp)
         Column(
             modifier = Modifier
-                .weight(1f, fill = false)
+                .heightIn(max = APP_LIST_MAX_DP.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -350,6 +360,16 @@ private fun Rail(
                         )
                 )
             }
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(AppShape)
+                    .border(1.dp, OutlineButton, AppShape)
+                    .clickable(role = Role.Button, onClickLabel = "Atur isi sidebar", onClick = actions.onEdit),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(GTIcons.Plus, contentDescription = "Atur isi sidebar", tint = TextSecondary, modifier = Modifier.size(18.dp))
+            }
         }
         Box(
             Modifier
@@ -359,28 +379,41 @@ private fun Rail(
         )
         RailButton(GTIcons.Camera, "Screenshot", TextSoft, actions.onScreenshot)
         RailButton(GTIcons.Record, if (recording) "Stop rekam" else "Rekam layar", if (recording) accent else TextSoft, actions.onRecord)
-        Box(
-            modifier = Modifier
-                .size(width = 44.dp, height = 36.dp)
-                .clip(ButtonShape)
-                .border(1.dp, OutlineButton, ButtonShape)
-                .clickable(role = Role.Button, onClickLabel = "Atur isi sidebar", onClick = actions.onEdit),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(GTIcons.Plus, contentDescription = "Atur isi sidebar", tint = TextSecondary, modifier = Modifier.size(18.dp))
-        }
     }
 }
+
 
 @Composable
 private fun RailButton(icon: ImageVector, label: String, tint: Color, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(width = 44.dp, height = 40.dp)
+            .size(44.dp)
+            .clip(AppShape)
+            .border(1.dp, BevelBrush, AppShape)
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
+    }
+}
+
+@Composable
+private fun SidebarHandle(accent: Color, onEnd: Boolean) {
+    Box(
+        modifier = Modifier.size(width = SIDEBAR_HANDLE_W_DP.dp, height = SIDEBAR_HANDLE_H_DP.dp),
+        contentAlignment = if (onEnd) Alignment.CenterEnd else Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .width(5.dp)
+                .height(76.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(accent.copy(alpha = 0.35f), accent, accent, accent.copy(alpha = 0.35f))
+                    )
+                )
+        )
     }
 }
 

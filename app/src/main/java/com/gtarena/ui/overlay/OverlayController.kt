@@ -4,6 +4,7 @@ import android.content.ComponentCallbacks
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.os.SystemClock
 import android.provider.Settings
@@ -16,7 +17,6 @@ import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
@@ -51,7 +51,6 @@ internal class OverlayUiState {
     var expanded by mutableStateOf(false)
     var onEnd by mutableStateOf(true)
     var fps by mutableStateOf<Int?>(null)
-    val samples = mutableStateListOf<Int>()
     var bubble by mutableStateOf(false)
     var crosshair by mutableStateOf(false)
     var sessionStart by mutableLongStateOf(0L)
@@ -116,6 +115,12 @@ internal fun addOverlayWindow(
     return OverlayWindow(view, owner, lp)
 }
 
+internal fun excludeSystemGestures(view: View) {
+    view.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+        v.systemGestureExclusionRects = listOf(Rect(0, 0, v.width, v.height))
+    }
+}
+
 internal fun removeOverlayWindow(manager: WindowManager?, window: OverlayWindow?) {
     window ?: return
     try {
@@ -176,7 +181,6 @@ class OverlayController(
     fun show(session: GameSession) {
         if (ui.session?.pkg != session.pkg) {
             ui.sessionStart = SystemClock.elapsedRealtime()
-            ui.samples.clear()
             ui.fps = null
         }
         ui.session = session
@@ -279,6 +283,7 @@ class OverlayController(
         lp.y = handleY
         main = addWindow(lp) { OverlayRoot(state = ui, actions = actions) }.also {
             it.view.setOnTouchListener(handleTouchListener())
+            excludeSystemGestures(it.view)
         }
 
         val s = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -290,12 +295,7 @@ class OverlayController(
             while (true) {
                 val session = ui.session
                 if (session != null && (ui.expanded || ui.bubble)) {
-                    val v = FpsReader.read(session.pkg)
-                    ui.fps = v
-                    if (v != null) {
-                        ui.samples.add(v)
-                        if (ui.samples.size > 40) ui.samples.removeAt(0)
-                    }
+                    ui.fps = FpsReader.read(session.pkg)
                 }
                 delay(1000L)
             }
@@ -347,7 +347,7 @@ class OverlayController(
         views.forEach { it.visibility = View.INVISIBLE }
         scope?.launch {
             delay(400L)
-            GameTools.screenshot(context)
+            GameTools.screenshot()
             views.forEach { it.visibility = View.VISIBLE }
         }
     }
