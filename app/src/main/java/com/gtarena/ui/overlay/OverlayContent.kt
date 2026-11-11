@@ -107,22 +107,32 @@ internal class OverlayActions(
 )
 
 @Composable
-private fun AppStrip(apps: List<String>, onOpen: (String) -> Unit) {
+private fun AppStrip(apps: List<String>, onOpen: (String) -> Unit, onAdd: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         apps.forEach { pkg ->
             AppIcon(
                 pkg = pkg,
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(40.dp)
                     .clip(AppShape)
                     .clickable(role = Role.Button, onClickLabel = "Buka melayang") { onOpen(pkg) }
             )
+        }
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(AppShape)
+                .border(1.dp, BevelBrush, AppShape)
+                .clickable(role = Role.Button, onClickLabel = "Tambah app melayang", onClick = onAdd),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(GTIcons.Plus, contentDescription = "Tambah app melayang", tint = TextSoft, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -143,7 +153,9 @@ internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
     val focusOn by FocusMode.enabled.collectAsState()
     val brightnessLocked by FocusMode.brightnessLocked.collectAsState()
     val recording by GameTools.recording.collectAsState()
-    val apps by remember { SettingsStore.get(context).sidebarApps }.collectAsState()
+    val store = remember { SettingsStore.get(context) }
+    val apps by store.sidebarApps.collectAsState()
+    var picking by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         FocusMode.refreshBrightnessLock()
@@ -163,7 +175,11 @@ internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             PanelHeader(label = session.label, start = state.sessionStart, accent = accent)
-            if (apps.isNotEmpty()) AppStrip(apps = apps, onOpen = actions.onOpenApp)
+            if (picking) {
+                AppPicker(selected = apps, accent = accent, onToggle = store::setSidebarApp, onDone = { picking = false })
+                return@Column
+            }
+            AppStrip(apps = apps, onOpen = actions.onOpenApp, onAdd = { picking = true })
             HeroRow(fps = state.fps, stats = stats, accent = accent, fpsColor = session.profile.textOnDark)
             Row(
                 modifier = Modifier
