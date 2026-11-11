@@ -44,6 +44,13 @@ import com.gtarena.ui.theme.TextSecondary
 import com.gtarena.ui.theme.color
 
 private val RefreshOptions = listOf(60, 90, 120)
+private val ThermalLabels = listOf("Normal", "Longgar", "Lepas")
+private val ThermalCaptions = listOf(
+    "Bawaan HP. Performa diturunin pas bodi 45-48°C.",
+    "Performa baru diturunin pas bodi 53-56°C. Balik normal kalau baterai nyentuh 46°C.",
+    "Suhu bodi diabaikan, CPU boleh sampe 95°C. HP bisa panas banget dan baterai lebih cepet aus. " +
+        "Balik normal kalau baterai nyentuh 50°C. Pengaman mati paksa bawaan HP tetep jalan."
+)
 
 @Composable
 fun BackLink(onBack: () -> Unit) {
@@ -128,12 +135,26 @@ fun GameEditor(game: GameEntry, onBack: () -> Unit, modifier: Modifier = Modifie
             accent = accent,
             onCheckedChange = { save(cfg.copy(crosshair = it)) }
         )
-        SettingRow(
-            title = "Longgarin batas panas",
-            caption = "Performa baru diturunin pas bodi 53-56°C, bukan 45-48°C. HP lebih panas di tangan. Balik normal sendiri kalau baterai nyentuh 46°C atau game ditutup",
-            checked = cfg.thermalRelax,
-            accent = accent,
-            onCheckedChange = { save(cfg.copy(thermalRelax = it)) }
+        SectionLabel("Batas panas")
+        Row(
+            modifier = Modifier.fillMaxWidth().selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            ThermalLabels.forEachIndexed { level, label ->
+                SlantTab(
+                    text = label,
+                    active = level == cfg.thermalLevel,
+                    color = accent,
+                    onClick = { save(cfg.copy(thermalLevel = level)) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        Text(
+            text = ThermalCaptions[cfg.thermalLevel],
+            color = TextSecondary,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 8.dp, bottom = 14.dp)
         )
     }
 }

@@ -12,7 +12,7 @@ data class GameConfig(
     val focus: Boolean = false,
     val bypassCharge: Boolean = false,
     val crosshair: Boolean = false,
-    val thermalRelax: Boolean = false
+    val thermalLevel: Int = 0
 )
 
 class SettingsStore private constructor(context: Context) {
@@ -91,7 +91,7 @@ class SettingsStore private constructor(context: Context) {
     fun setGameConfig(pkg: String, cfg: GameConfig) {
         _gameConfigs.value = _gameConfigs.value + (pkg to cfg)
         prefs.edit()
-            .putString(GAME_PREFIX + pkg, "${cfg.profile.name}|${cfg.refreshHz}|${cfg.focus}|${cfg.bypassCharge}|${cfg.crosshair}|${cfg.thermalRelax}")
+            .putString(GAME_PREFIX + pkg, "${cfg.profile.name}|${cfg.refreshHz}|${cfg.focus}|${cfg.bypassCharge}|${cfg.crosshair}|${cfg.thermalLevel}")
             .apply()
     }
 
@@ -101,8 +101,11 @@ class SettingsStore private constructor(context: Context) {
             if (parts.size < 4) return@mapNotNull null
             val profile = runCatching { Profile.valueOf(parts[0]) }.getOrNull() ?: return@mapNotNull null
             val hz = parts[1].toIntOrNull() ?: return@mapNotNull null
-            key.removePrefix(GAME_PREFIX) to GameConfig(profile, hz, parts[2].toBoolean(), parts[3].toBoolean(), parts.getOrNull(4).toBoolean(), parts.getOrNull(5).toBoolean())
+            key.removePrefix(GAME_PREFIX) to GameConfig(profile, hz, parts[2].toBoolean(), parts[3].toBoolean(), parts.getOrNull(4).toBoolean(), thermalLevel(parts.getOrNull(5)))
         }.toMap()
+
+    private fun thermalLevel(raw: String?): Int =
+        if (raw == "true") 1 else raw?.toIntOrNull()?.coerceIn(0, 2) ?: 0
 
     companion object {
         private const val KEY_PROFILE = "profile"

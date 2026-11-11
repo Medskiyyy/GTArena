@@ -41,16 +41,22 @@ object ProfileEngine {
 
     private const val TM = "/vendor/bin/thermal_manager /vendor/etc/.tp"
 
-    private fun thermal(relax: Boolean) =
-        if (relax) "[ -f $DIR/thermal ] || { $TM/.thermal_policy_03; touch $DIR/thermal; }; "
-        else "if [ -f $DIR/thermal ]; then $TM/thermal.conf; rm -f $DIR/thermal; fi; "
+    private const val CTM_UNLOCKED = "2 95000 95000 53000 56000 85000 85000 95000 0 85000 0 500 500 13500 -1"
+
+    private fun thermal(level: Int) = when (level) {
+        1, 2 ->
+            "[ \"$(cat $DIR/thermal 2>/dev/null)\" = $level ] || { $TM/.thermal_policy_03; " +
+                (if (level == 2) "echo '$CTM_UNLOCKED' > /proc/driver/thermal/clctm; " else "") +
+                "echo $level > $DIR/thermal; }; "
+        else -> "if [ -f $DIR/thermal ]; then $TM/thermal.conf; rm -f $DIR/thermal; fi; "
+    }
 
     suspend fun batteryTempC(): Int? =
         RootShell.run("cat /sys/class/power_supply/battery/temp")?.trim()?.toIntOrNull()?.div(10)
 
-    private fun recipe(profile: Profile, refreshHz: Int?, bypassCharge: Boolean, thermalRelax: Boolean = false): String {
+    private fun recipe(profile: Profile, refreshHz: Int?, bypassCharge: Boolean, thermalLevel: Int = 0): String {
         val hz = refreshHz?.takeIf { it == 60 || it == 90 || it == 120 }
-        return bypass(bypassCharge) + thermal(thermalRelax) + when (profile) {
+        return bypass(bypassCharge) + thermal(thermalLevel) + when (profile) {
             Profile.HEMAT ->
                 MIN_FLOORS + maxFreq(1450000, 1451000, 1482000) + EFFICIENT + upDelay(20, 30, 40) +
                     gpu(20) + refresh(hz ?: 60, hz ?: 60) + touch(0)
@@ -69,9 +75,9 @@ object ProfileEngine {
         profile: Profile,
         refreshHz: Int? = null,
         bypassCharge: Boolean = false,
-        thermalRelax: Boolean = false
+        thermalLevel: Int = 0
     ): Boolean =
-        RootShell.run(BEAT + "; " + recipe(profile, refreshHz, bypassCharge, thermalRelax) + "echo ${profile.name} > $DIR/profile") != null
+        RootShell.run(BEAT + "; " + recipe(profile, refreshHz, bypassCharge, thermalLevel) + "echo ${profile.name} > $DIR/profile") != null
 
     suspend fun heartbeat() {
         RootShell.run(BEAT)

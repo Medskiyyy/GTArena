@@ -12,6 +12,7 @@ import com.gtarena.model.DeviceStats
 import com.gtarena.model.GameEntry
 import com.gtarena.model.HomeState
 import com.gtarena.model.Profile
+import com.gtarena.service.ArenaService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -53,7 +54,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun launch(game: GameEntry) {
-        gameRepo.launch(game.pkg)
+        if (gameRepo.launch(game.pkg)) ArenaService.start(getApplication(), game.pkg)
     }
 
     suspend fun otherApps(): List<AppItem> = gameRepo.otherApps()

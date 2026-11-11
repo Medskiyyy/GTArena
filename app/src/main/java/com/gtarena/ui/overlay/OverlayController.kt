@@ -82,7 +82,7 @@ class OverlayController(
     private val onProfileChange: (Profile) -> Unit,
     private val onBypassChange: (Boolean) -> Unit,
     private val onRefreshChange: (Int) -> Unit,
-    private val onThermalChange: (Boolean) -> Unit
+    private val onThermalChange: (Int) -> Unit
 ) {
     private val settings = SettingsStore.get(context)
     private val ui = OverlayUiState()
@@ -93,6 +93,9 @@ class OverlayController(
     private var bubble: OverlayWindow? = null
     private var crosshair: OverlayWindow? = null
     private var splash: OverlayWindow? = null
+    private var splashWm: WindowManager? = null
+    private var splashPkg: String? = null
+    private var splashAt = 0L
 
     private var density = 1f
     private var handleY = 0
@@ -130,7 +133,7 @@ class OverlayController(
         try {
             attach()
             setCrosshair(session.crosshair)
-            showSplash(session)
+            splash(session.pkg, session.profile)
         } catch (e: Exception) {
             hide()
         }
@@ -142,8 +145,6 @@ class OverlayController(
         remove(main)
         remove(bubble)
         remove(crosshair)
-        remove(splash)
-        splash = null
         main = null
         bubble = null
         crosshair = null
@@ -159,11 +160,46 @@ class OverlayController(
         ui.session = null
     }
 
-    private fun attach() {
+    private fun overlayContext(): Context {
         val dm = context.getSystemService(DisplayManager::class.java)
-        val display = dm.getDisplay(Display.DEFAULT_DISPLAY)
-        val wctx = context.createDisplayContext(display)
+        return context.createDisplayContext(dm.getDisplay(Display.DEFAULT_DISPLAY))
             .createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
+    }
+
+    fun splash(pkg: String, profile: Profile) {
+        val now = SystemClock.elapsedRealtime()
+        if (splashPkg == pkg && now - splashAt < SPLASH_REPEAT_MS) return
+        if (!Settings.canDrawOverlays(context)) return
+        removeSplash()
+        splashPkg = pkg
+        splashAt = now
+        try {
+            val wctx = overlayContext()
+            val manager = wctx.getSystemService(WindowManager::class.java)
+            val lp = baseParams()
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT
+            lp.height = WindowManager.LayoutParams.MATCH_PARENT
+            lp.gravity = Gravity.CENTER
+            splashWm = manager
+            splash = addWindow(lp, wctx, manager) { OverlaySplash(profile) { removeSplash() } }
+        } catch (e: Exception) {
+            removeSplash()
+        }
+    }
+
+    private fun removeSplash() {
+        val window = splash ?: return
+        try {
+            splashWm?.removeView(window.view)
+        } catch (_: Exception) {
+        }
+        window.owner.destroy()
+        splash = null
+        splashWm = null
+    }
+
+    private fun attach() {
+        val wctx = overlayContext()
         windowContext = wctx
         wm = wctx.getSystemService(WindowManager::class.java)
         density = wctx.resources.displayMetrics.density
@@ -218,14 +254,19 @@ class OverlayController(
         return lp
     }
 
-    private fun addWindow(lp: WindowManager.LayoutParams, content: @Composable () -> Unit): OverlayWindow {
+    private fun addWindow(
+        lp: WindowManager.LayoutParams,
+        wctx: Context = windowContext!!,
+        manager: WindowManager = wm!!,
+        content: @Composable () -> Unit
+    ): OverlayWindow {
         val owner = OverlayOwner()
-        val view = ComposeView(windowContext!!)
+        val view = ComposeView(wctx)
         view.setViewTreeLifecycleOwner(owner)
         view.setViewTreeSavedStateRegistryOwner(owner)
         view.setViewTreeViewModelStoreOwner(owner)
         view.setContent { GTArenaTheme(content) }
-        wm!!.addView(view, lp)
+        manager.addView(view, lp)
         return OverlayWindow(view, owner, lp)
     }
 
@@ -263,19 +304,6 @@ class OverlayController(
         } else if (!on) {
             remove(crosshair)
             crosshair = null
-        }
-    }
-
-    private fun showSplash(session: GameSession) {
-        val lp = baseParams(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
-        lp.width = WindowManager.LayoutParams.MATCH_PARENT
-        lp.height = WindowManager.LayoutParams.MATCH_PARENT
-        lp.gravity = Gravity.CENTER
-        splash = addWindow(lp) {
-            OverlaySplash(session.profile) {
-                remove(splash)
-                splash = null
-            }
         }
     }
 
@@ -420,4 +448,8 @@ class OverlayController(
     }
 
     private fun dp(value: Int): Int = (value * density).toInt()
+
+    private companion object {
+        const val SPLASH_REPEAT_MS = 15_000L
+    }
 }

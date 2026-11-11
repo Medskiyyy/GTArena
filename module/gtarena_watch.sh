@@ -17,7 +17,7 @@ while true; do
             [ -n "$c" ] || continue
             case "$list" in
                 *"$NL$c$NL"*)
-                    am start-foreground-service -n com.gtarena/.service.ArenaService >/dev/null 2>&1
+                    cmd activity start-foreground-service -n com.gtarena/.service.ArenaService --es game "$c" >/dev/null 2>&1
                     echo "gtarena wake for $c uptime=$(cut -d' ' -f1 /proc/uptime)" >> $L
                     sleep 12
                     break
@@ -26,7 +26,7 @@ while true; do
         done
     fi
     tick=$((tick + 1))
-    if [ $tick -ge 20 ]; then
+    if [ $tick -ge 40 ]; then
         tick=0
         if [ -f $H ]; then
             hb=$(cat $H 2>/dev/null)
@@ -64,5 +64,5 @@ while true; do
             fi
         fi
     fi
-    sleep 1
+    sleep 0.5
 done

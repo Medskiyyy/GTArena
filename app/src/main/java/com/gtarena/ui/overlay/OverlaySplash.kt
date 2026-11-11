@@ -56,7 +56,7 @@ internal fun OverlaySplash(profile: Profile, onDone: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer { alpha = span(ms, 0f, 160f) * (1f - span(ms, FADE_OUT_MS, TOTAL_MS)) }
-            .drawBehind { drawRect(Ground, alpha = 0.9f) },
+            .drawBehind { drawRect(Ground) },
         contentAlignment = Alignment.Center
     ) {
         Column(
