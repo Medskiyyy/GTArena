@@ -120,7 +120,9 @@ class ArenaService : LifecycleService() {
             while (true) {
                 ProfileEngine.heartbeat()
                 val level = _session.value?.thermal ?: 0
-                if (level > 0 && (ProfileEngine.batteryTempC() ?: 0) >= THERMAL_GUARD_C[level]) switchThermal(0)
+                if (level > 0 && (ProfileEngine.batteryTempC() ?: 0) >= THERMAL_GUARD_C[level]) {
+                    switchThermal(0, persist = false)
+                }
                 delay(HEARTBEAT_MS)
             }
         }
@@ -279,64 +281,51 @@ class ArenaService : LifecycleService() {
         applyLocked(settings.profile.value, null)
     }
 
-    private fun switchProfile(profile: Profile) {
+    private fun updateSession(persist: Boolean = true, transform: (GameSession) -> GameSession) {
         lifecycleScope.launch {
             sessionLock.withLock {
-                val s = _session.value ?: return@withLock
-                _session.value = s.copy(profile = profile)
-                applyLocked(profile, s.refreshHz, s.bypass, s.thermal)
+                val current = _session.value ?: return@withLock
+                val next = transform(current)
+                _session.value = next
+                if (persist) {
+                    settings.setGameConfig(
+                        next.pkg,
+                        settings.gameConfig(next.pkg).copy(
+                            profile = next.profile,
+                            refreshHz = next.refreshHz,
+                            focus = next.focus,
+                            bypassCharge = next.bypass,
+                            crosshair = next.crosshair,
+                            thermalLevel = next.thermal
+                        )
+                    )
+                }
+                if (next.focus != current.focus) {
+                    if (next.focus) FocusMode.enable() else FocusMode.disable()
+                }
+                if (
+                    next.profile != current.profile ||
+                    next.refreshHz != current.refreshHz ||
+                    next.bypass != current.bypass ||
+                    next.thermal != current.thermal
+                ) {
+                    applyLocked(next.profile, next.refreshHz, next.bypass, next.thermal)
+                }
             }
         }
     }
 
-    private fun switchBypass(on: Boolean) {
-        lifecycleScope.launch {
-            sessionLock.withLock {
-                val s = _session.value ?: return@withLock
-                _session.value = s.copy(bypass = on)
-                applyLocked(s.profile, s.refreshHz, on, s.thermal)
-            }
-        }
-    }
+    private fun switchProfile(profile: Profile) = updateSession { it.copy(profile = profile) }
 
-    private fun switchRefresh(hz: Int) {
-        lifecycleScope.launch {
-            sessionLock.withLock {
-                val s = _session.value ?: return@withLock
-                _session.value = s.copy(refreshHz = hz)
-                applyLocked(s.profile, hz, s.bypass, s.thermal)
-            }
-        }
-    }
+    private fun switchBypass(on: Boolean) = updateSession { it.copy(bypass = on) }
 
-    private fun switchThermal(level: Int) {
-        lifecycleScope.launch {
-            sessionLock.withLock {
-                val s = _session.value ?: return@withLock
-                _session.value = s.copy(thermal = level)
-                applyLocked(s.profile, s.refreshHz, s.bypass, level)
-            }
-        }
-    }
+    private fun switchRefresh(hz: Int) = updateSession { it.copy(refreshHz = hz) }
 
-    private fun switchFocus(on: Boolean) {
-        lifecycleScope.launch {
-            sessionLock.withLock {
-                val s = _session.value ?: return@withLock
-                _session.value = s.copy(focus = on)
-                if (on) FocusMode.enable() else FocusMode.disable()
-            }
-        }
-    }
+    private fun switchThermal(level: Int, persist: Boolean = true) = updateSession(persist) { it.copy(thermal = level) }
 
-    private fun switchCrosshair(on: Boolean) {
-        lifecycleScope.launch {
-            sessionLock.withLock {
-                val s = _session.value ?: return@withLock
-                _session.value = s.copy(crosshair = on)
-            }
-        }
-    }
+    private fun switchFocus(on: Boolean) = updateSession { it.copy(focus = on) }
+
+    private fun switchCrosshair(on: Boolean) = updateSession { it.copy(crosshair = on) }
 
     private suspend fun gameLabel(pkg: String): String? {
         games[pkg]?.let { return it }
