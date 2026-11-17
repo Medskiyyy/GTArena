@@ -41,7 +41,7 @@ fun gameSubtitle(game: GameEntry): String = buildList {
     add(game.profile.label)
     add("${game.refreshHz} Hz")
     if (game.focus) add("Fokus")
-    if (game.bypassCharge) add("Bypass cas")
+    if (game.bypassCharge) add("Bypass")
 }.joinToString(" · ")
 
 @Composable

@@ -67,13 +67,16 @@ private class Feature(val label: String, val icon: ImageVector?, val glyph: Stri
 private val Features = listOf(
     Feature("Bubble FPS", GTIcons.Arena),
     Feature("Crosshair", GTIcons.Crosshair),
+    Feature("Terang", GTIcons.Brightness),
     Feature("Hz maks", null, "120"),
     Feature("Fokus", GTIcons.Focus),
     Feature("Bypass cas", GTIcons.Bypass),
+    Feature("Batas panas", null, "48°"),
     Feature("Kunci terang", GTIcons.Brightness),
     Feature("Screenshot", GTIcons.Camera),
     Feature("Rekam layar", GTIcons.Record),
-    Feature("Bersihin RAM", GTIcons.Chip)
+    Feature("Bersihin RAM", GTIcons.Chip),
+    Feature("App melayang", GTIcons.Overlay)
 )
 
 @Composable
@@ -178,7 +181,7 @@ fun OverlayTab() {
             }
         }
         Text(
-            text = "Panel juga nampilin FPS dan grafiknya, suhu CPU, beban GPU, suhu baterai, " +
+            text = "Panel juga nampilin FPS, suhu CPU, beban GPU, suhu baterai, " +
                 "pilihan profil, slider kecerahan, dan lama sesi. Rekam layar maks 3 menit, tanpa suara.",
             color = TextSecondary,
             fontSize = 13.sp,

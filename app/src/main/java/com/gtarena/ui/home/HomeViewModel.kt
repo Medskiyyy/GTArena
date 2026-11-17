@@ -1,6 +1,11 @@
 package com.gtarena.ui.home
 
 import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gtarena.data.AppItem
@@ -26,6 +31,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val baseGames = MutableStateFlow(emptyList<GameEntry>())
     private val rootOk = MutableStateFlow(true)
+    private val refreshTick = MutableStateFlow(0)
+
+    private val pkgReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            refreshGames()
+        }
+    }
 
     private val games = combine(baseGames, store.gameConfigs) { list, configs ->
         list.map { game ->
@@ -42,10 +54,30 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         )
 
     init {
+        val pkgFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addDataScheme("package")
+        }
+        ContextCompat.registerReceiver(app, pkgReceiver, pkgFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
         viewModelScope.launch { rootOk.value = RootShell.isAvailable() }
         viewModelScope.launch {
-            store.extraGames.collect { baseGames.value = gameRepo.installedGames() }
+            combine(store.extraGames, refreshTick) { _, _ -> }.collect {
+                baseGames.value = gameRepo.installedGames()
+            }
         }
+    }
+
+    override fun onCleared() {
+        try {
+            getApplication<Application>().unregisterReceiver(pkgReceiver)
+        } catch (_: Exception) {
+        }
+        super.onCleared()
+    }
+
+    fun refreshGames() {
+        refreshTick.value++
     }
 
     fun selectProfile(p: Profile) {

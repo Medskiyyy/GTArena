@@ -100,6 +100,7 @@ internal class OverlayActions(
     val onBypass: (Boolean) -> Unit,
     val onRefresh: (Int) -> Unit,
     val onThermal: (Int) -> Unit,
+    val onFocus: (Boolean) -> Unit,
     val onBubble: (Boolean) -> Unit,
     val onCrosshair: (Boolean) -> Unit,
     val onScreenshot: () -> Unit,
@@ -224,7 +225,7 @@ internal fun OverlayRoot(state: OverlayUiState, actions: OverlayActions) {
                 )
                 Tile(
                     "Fokus", focusOn, accent,
-                    { scope.launch { if (focusOn) FocusMode.disable() else FocusMode.enable() } },
+                    { actions.onFocus(!focusOn) },
                     icon = GTIcons.Focus
                 )
                 Tile("Bypass cas", session.bypass, accent, { actions.onBypass(!session.bypass) }, icon = GTIcons.Bypass)

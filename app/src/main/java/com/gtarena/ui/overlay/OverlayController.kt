@@ -3,6 +3,7 @@ package com.gtarena.ui.overlay
 import android.content.ComponentCallbacks
 import android.content.Context
 import android.content.res.Configuration
+import android.graphics.Insets
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.hardware.display.DisplayManager
@@ -13,6 +14,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.WindowInsets
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,6 +41,7 @@ import com.gtarena.service.GameSession
 import com.gtarena.ui.theme.GTArenaTheme
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -130,12 +133,72 @@ internal fun removeOverlayWindow(manager: WindowManager?, window: OverlayWindow?
     window.owner.destroy()
 }
 
+internal fun systemInsets(manager: WindowManager): Insets =
+    manager.currentWindowMetrics.windowInsets.getInsetsIgnoringVisibility(
+        WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+    )
+
+internal fun edgeHandleY(manager: WindowManager, handleHeightPx: Int, handleFrac: Float): Int {
+    val height = manager.currentWindowMetrics.bounds.height()
+    val insets = systemInsets(manager)
+    val minY = insets.top
+    val maxY = max(minY, height - insets.bottom - handleHeightPx)
+    return (minY + (maxY - minY) * handleFrac).roundToInt().coerceIn(minY, maxY)
+}
+
+internal fun clampedExpandedY(
+    manager: WindowManager,
+    handleHeightPx: Int,
+    handleFrac: Float,
+    viewHeight: Int,
+    marginPx: Int
+): Int {
+    val bounds = manager.currentWindowMetrics.bounds
+    val insets = systemInsets(manager)
+    val safeTop = insets.top + marginPx
+    val safeBottom = bounds.height() - insets.bottom - marginPx
+    val handleCenterY = edgeHandleY(manager, handleHeightPx, handleFrac) + handleHeightPx / 2
+    return (handleCenterY - viewHeight / 2).coerceIn(safeTop, max(safeTop, safeBottom - viewHeight))
+}
+
+internal fun reclampExpandedOnLayout(
+    view: View,
+    handleHeightPx: Int,
+    isExpanded: () -> Boolean,
+    window: () -> OverlayWindow?,
+    manager: () -> WindowManager?,
+    onHeight: (Int) -> Unit,
+    desiredY: (WindowManager, Int) -> Int
+) {
+    view.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+        if (!isExpanded() || v.height <= 0) return@addOnLayoutChangeListener
+        if (v.height > handleHeightPx) onHeight(v.height)
+        v.post {
+            val w = window() ?: return@post
+            val mgr = manager() ?: return@post
+            if (!isExpanded() || w.view !== v || v.height <= 0) return@post
+            if (v.height > handleHeightPx) onHeight(v.height)
+            val params = w.params
+            val y = desiredY(mgr, v.height)
+            if (params.y != y) {
+                params.y = y
+                try {
+                    mgr.updateViewLayout(v, params)
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+}
+
 class OverlayController(
     private val context: Context,
     private val onProfileChange: (Profile) -> Unit,
     private val onBypassChange: (Boolean) -> Unit,
     private val onRefreshChange: (Int) -> Unit,
-    private val onThermalChange: (Int) -> Unit
+    private val onThermalChange: (Int) -> Unit,
+    private val onFocusChange: (Boolean) -> Unit,
+    private val onCrosshairChange: (Boolean) -> Unit
 ) {
     private val settings = SettingsStore.get(context)
     private val ui = OverlayUiState()
@@ -149,9 +212,11 @@ class OverlayController(
     private var splashWm: WindowManager? = null
     private var splashPkg: String? = null
     private var splashAt = 0L
+    private var isRealSplash = false
 
     private var density = 1f
-    private var handleY = 0
+    private var handleFrac = 0.12f
+    private var lastExpandedHeight = 0
     private var bubbleX = 0
     private var bubbleY = 0
 
@@ -160,8 +225,12 @@ class OverlayController(
         onBypass = { onBypassChange(it) },
         onRefresh = { onRefreshChange(it) },
         onThermal = { onThermalChange(it) },
+        onFocus = { onFocusChange(it) },
         onBubble = { settings.setFpsBubble(it) },
-        onCrosshair = { setCrosshair(it) },
+        onCrosshair = {
+            setCrosshair(it)
+            onCrosshairChange(it)
+        },
         onScreenshot = { screenshot() },
         onOpenApp = { pkg ->
             setExpanded(false)
@@ -171,6 +240,8 @@ class OverlayController(
 
     private val callbacks = object : ComponentCallbacks {
         override fun onConfigurationChanged(newConfig: Configuration) {
+            lastExpandedHeight = 0
+            loadEdgePos()
             setExpanded(ui.expanded)
             clampBubble()
         }
@@ -180,16 +251,16 @@ class OverlayController(
 
     fun show(session: GameSession) {
         if (ui.session?.pkg != session.pkg) {
-            ui.sessionStart = SystemClock.elapsedRealtime()
             ui.fps = null
         }
+        ui.sessionStart = session.startedAt
         ui.session = session
         if (main != null) return
         if (!Settings.canDrawOverlays(context)) return
         try {
             attach()
             setCrosshair(session.crosshair)
-            splash(session.pkg, session.profile)
+            if (!session.resumed) splash(session.pkg, session.profile)
         } catch (e: Exception) {
             hide()
         }
@@ -214,6 +285,7 @@ class OverlayController(
         ui.bubble = false
         ui.crosshair = false
         ui.session = null
+        lastExpandedHeight = 0
     }
 
     private fun overlayContext(): Context = overlayContext(context)
@@ -225,6 +297,8 @@ class OverlayController(
         removeSplash()
         splashPkg = pkg
         splashAt = now
+        isRealSplash = true
+        main?.view?.visibility = View.INVISIBLE
         try {
             val wctx = overlayContext()
             val manager = wctx.getSystemService(WindowManager::class.java)
@@ -248,6 +322,7 @@ class OverlayController(
             lp.width = 1
             lp.height = 1
             lp.alpha = 0f
+            isRealSplash = false
             splashWm = manager
             splash = addWindow(lp, wctx, manager) { OverlaySplash(Profile.SEIMBANG) { removeSplash() } }
         } catch (e: Exception) {
@@ -256,34 +331,49 @@ class OverlayController(
     }
 
     private fun removeSplash() {
-        val window = splash ?: return
-        try {
-            splashWm?.removeView(window.view)
-        } catch (_: Exception) {
+        val wasReal = isRealSplash
+        isRealSplash = false
+        val window = splash
+        if (window != null) {
+            try {
+                splashWm?.removeView(window.view)
+            } catch (_: Exception) {
+            }
+            window.owner.destroy()
+            splash = null
+            splashWm = null
         }
-        window.owner.destroy()
-        splash = null
-        splashWm = null
+        if (wasReal) main?.view?.visibility = View.VISIBLE
     }
 
     private fun attach() {
         val wctx = overlayContext()
         windowContext = wctx
-        wm = wctx.getSystemService(WindowManager::class.java)
+        val manager = wctx.getSystemService(WindowManager::class.java)
+        wm = manager
         density = wctx.resources.displayMetrics.density
-        handleY = dp(96)
+        loadEdgePos()
         loadBubblePos()
         ui.expanded = false
-        ui.onEnd = true
         wctx.registerComponentCallbacks(callbacks)
 
         val lp = baseParams(WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH)
-        lp.gravity = Gravity.TOP or Gravity.END
+        lp.gravity = Gravity.TOP or (if (ui.onEnd) Gravity.END else Gravity.START)
         lp.x = 0
-        lp.y = handleY
+        lp.y = edgeHandleY(manager, dp(HANDLE_HEIGHT_DP), handleFrac)
         main = addWindow(lp) { OverlayRoot(state = ui, actions = actions) }.also {
+            if (splash != null && isRealSplash) it.view.visibility = View.INVISIBLE
             it.view.setOnTouchListener(handleTouchListener())
             excludeSystemGestures(it.view)
+            reclampExpandedOnLayout(
+                view = it.view,
+                handleHeightPx = dp(HANDLE_HEIGHT_DP),
+                isExpanded = { ui.expanded },
+                window = { main },
+                manager = { wm },
+                onHeight = { h -> lastExpandedHeight = h },
+                desiredY = { mgr, h -> clampedExpandedY(mgr, dp(HANDLE_HEIGHT_DP), handleFrac, h, dp(8)) }
+            )
         }
 
         val s = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -415,6 +505,7 @@ class OverlayController(
         val slop = ViewConfiguration.get(context).scaledTouchSlop
         var downX = 0f
         var downY = 0f
+        var startX = 0
         var startY = 0
         var dragging = false
         return View.OnTouchListener { v, e ->
@@ -424,28 +515,39 @@ class OverlayController(
                 if (e.actionMasked == MotionEvent.ACTION_OUTSIDE) setExpanded(false)
                 return@OnTouchListener false
             }
+            val bounds = manager.currentWindowMetrics.bounds
+            val insets = systemInsets(manager)
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = e.rawX
                     downY = e.rawY
+                    startX = if (ui.onEnd) bounds.width() - v.width else 0
                     startY = lp.y
                     dragging = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    val dx = e.rawX - downX
                     val dy = e.rawY - downY
-                    if (!dragging && hypot(e.rawX - downX, dy) > slop) dragging = true
+                    if (!dragging && hypot(dx, dy) > slop) {
+                        dragging = true
+                        lp.gravity = Gravity.TOP or Gravity.START
+                    }
                     if (dragging) {
-                        val bounds = manager.currentWindowMetrics.bounds
-                        lp.y = (startY + dy).toInt().coerceIn(0, max(0, bounds.height() - v.height))
-                        handleY = lp.y
+                        val minY = insets.top
+                        val maxY = max(minY, bounds.height() - insets.bottom - v.height)
+                        lp.x = (startX + dx).toInt().coerceIn(0, max(0, bounds.width() - v.width))
+                        lp.y = (startY + dy).toInt().coerceIn(minY, maxY)
+                        val span = max(1, maxY - minY)
+                        handleFrac = ((lp.y - minY) / span.toFloat()).coerceIn(0f, 1f)
                         manager.updateViewLayout(v, lp)
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
                     if (dragging) {
-                        ui.onEnd = e.rawX > manager.currentWindowMetrics.bounds.width() / 2f
+                        ui.onEnd = e.rawX > bounds.width() / 2f
+                        settings.setEdgePos(false, isLandscape(), ui.onEnd, handleFrac)
                         setExpanded(false)
                     } else {
                         setExpanded(true)
@@ -462,16 +564,20 @@ class OverlayController(
         val window = main ?: return
         val manager = wm ?: return
         val lp = window.params
-        val screenHeight = manager.currentWindowMetrics.bounds.height()
+        val insets = systemInsets(manager)
         lp.gravity = Gravity.TOP or (if (ui.onEnd) Gravity.END else Gravity.START)
         if (expanded) {
-            lp.x = dp(8)
-            lp.y = handleY.coerceIn(dp(8), max(dp(8), screenHeight - dp(PANEL_HEIGHT_DP + 8)))
+            lp.x = dp(8) + (if (ui.onEnd) insets.right else insets.left)
+            val estHeight = when {
+                window.view.height > dp(HANDLE_HEIGHT_DP) -> window.view.height
+                lastExpandedHeight > 0 -> lastExpandedHeight
+                else -> dp(PANEL_HEIGHT_DP)
+            }
+            lp.y = clampedExpandedY(manager, dp(HANDLE_HEIGHT_DP), handleFrac, estHeight, dp(8))
             lp.width = dp(PANEL_WIDTH_DP)
         } else {
-            handleY = handleY.coerceIn(0, max(0, screenHeight - dp(HANDLE_HEIGHT_DP)))
             lp.x = 0
-            lp.y = handleY
+            lp.y = edgeHandleY(manager, dp(HANDLE_HEIGHT_DP), handleFrac)
             lp.width = WindowManager.LayoutParams.WRAP_CONTENT
         }
         ui.expanded = expanded
@@ -479,6 +585,12 @@ class OverlayController(
             manager.updateViewLayout(window.view, lp)
         } catch (_: Exception) {
         }
+    }
+
+    private fun loadEdgePos() {
+        val pos = settings.edgePos(isSidebar = false, landscape = isLandscape())
+        ui.onEnd = pos.onEnd
+        handleFrac = pos.yFrac
     }
 
     private fun dp(value: Int): Int = (value * density).toInt()

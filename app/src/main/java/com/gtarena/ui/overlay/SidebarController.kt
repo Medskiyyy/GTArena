@@ -31,8 +31,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,7 +44,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -90,6 +91,7 @@ private const val SIDEBAR_HANDLE_H_DP = 96
 internal class SidebarUiState {
     var expanded by mutableStateOf(false)
     var onEnd by mutableStateOf(true)
+    var availHeightDp by mutableIntStateOf(600)
     var flyout by mutableStateOf<String?>(null)
     var shortcuts by mutableStateOf<List<AppShortcut>?>(null)
 }
@@ -113,6 +115,7 @@ class SidebarController(private val context: Context) {
     private var scope: CoroutineScope? = null
     private var density = 1f
     private var handleFrac = 0.4f
+    private var lastExpandedHeight = 0
 
     private val actions = SidebarActions(
         onOpen = { pkg -> collapseThen { Sidebar.openFloating(context, pkg) } },
@@ -133,6 +136,9 @@ class SidebarController(private val context: Context) {
 
     private val callbacks = object : ComponentCallbacks {
         override fun onConfigurationChanged(newConfig: Configuration) {
+            val manager = wm ?: return
+            lastExpandedHeight = 0
+            loadEdgePos(manager)
             setExpanded(false)
         }
 
@@ -147,15 +153,25 @@ class SidebarController(private val context: Context) {
             windowContext = wctx
             wm = manager
             density = wctx.resources.displayMetrics.density
+            loadEdgePos(manager)
             wctx.registerComponentCallbacks(callbacks)
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
             val lp = overlayParams(WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH)
             lp.gravity = Gravity.TOP or (if (ui.onEnd) Gravity.END else Gravity.START)
-            lp.y = handleY(manager)
+            lp.y = edgeHandleY(manager, dp(SIDEBAR_HANDLE_H_DP), handleFrac)
             ui.expanded = false
             window = addOverlayWindow(wctx, manager, lp) { SidebarRoot(ui, actions) }.also {
                 it.view.setOnTouchListener(touchListener())
                 excludeSystemGestures(it.view)
+                reclampExpandedOnLayout(
+                    view = it.view,
+                    handleHeightPx = dp(SIDEBAR_HANDLE_H_DP),
+                    isExpanded = { ui.expanded },
+                    window = { window },
+                    manager = { wm },
+                    onHeight = { h -> lastExpandedHeight = h },
+                    desiredY = { mgr, h -> clampedExpandedY(mgr, dp(SIDEBAR_HANDLE_H_DP), handleFrac, h, dp(8)) }
+                )
             }
         } catch (e: Exception) {
             hide()
@@ -175,6 +191,7 @@ class SidebarController(private val context: Context) {
         wm = null
         ui.expanded = false
         ui.flyout = null
+        lastExpandedHeight = 0
     }
 
     private fun collapseThen(block: suspend () -> Unit) {
@@ -217,6 +234,7 @@ class SidebarController(private val context: Context) {
                 return@OnTouchListener false
             }
             val bounds = manager.currentWindowMetrics.bounds
+            val insets = systemInsets(manager)
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = e.rawX
@@ -234,16 +252,20 @@ class SidebarController(private val context: Context) {
                         lp.gravity = Gravity.TOP or Gravity.START
                     }
                     if (dragging) {
+                        val minY = insets.top
+                        val maxY = max(minY, bounds.height() - insets.bottom - v.height)
                         lp.x = (startX + dx).toInt().coerceIn(0, max(0, bounds.width() - v.width))
-                        lp.y = (startY + dy).toInt().coerceIn(0, max(0, bounds.height() - v.height))
-                        handleFrac = lp.y / bounds.height().toFloat()
+                        lp.y = (startY + dy).toInt().coerceIn(minY, maxY)
+                        val span = max(1, maxY - minY)
+                        handleFrac = ((lp.y - minY) / span.toFloat()).coerceIn(0f, 1f)
                         manager.updateViewLayout(v, lp)
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
                     if (dragging) {
-                        ui.onEnd = e.rawX > manager.currentWindowMetrics.bounds.width() / 2f
+                        ui.onEnd = e.rawX > bounds.width() / 2f
+                        settings.setEdgePos(true, isLandscape(), ui.onEnd, handleFrac)
                         setExpanded(false)
                     } else {
                         setExpanded(true)
@@ -261,14 +283,20 @@ class SidebarController(private val context: Context) {
         val manager = wm ?: return
         val lp = w.params
         val side = if (ui.onEnd) Gravity.END else Gravity.START
+        lp.gravity = Gravity.TOP or side
         if (expanded) {
-            lp.gravity = Gravity.CENTER_VERTICAL or side
-            lp.x = dp(8)
-            lp.y = 0
+            updateAvailHeight(manager)
+            val insets = systemInsets(manager)
+            lp.x = dp(8) + (if (ui.onEnd) insets.right else insets.left)
+            val estHeight = when {
+                w.view.height > dp(SIDEBAR_HANDLE_H_DP) -> w.view.height
+                lastExpandedHeight > 0 -> lastExpandedHeight
+                else -> dp(340)
+            }
+            lp.y = clampedExpandedY(manager, dp(SIDEBAR_HANDLE_H_DP), handleFrac, estHeight, dp(8))
         } else {
-            lp.gravity = Gravity.TOP or side
             lp.x = 0
-            lp.y = handleY(manager)
+            lp.y = edgeHandleY(manager, dp(SIDEBAR_HANDLE_H_DP), handleFrac)
             ui.flyout = null
             ui.shortcuts = null
         }
@@ -279,9 +307,22 @@ class SidebarController(private val context: Context) {
         }
     }
 
-    private fun handleY(manager: WindowManager): Int {
-        val height = manager.currentWindowMetrics.bounds.height()
-        return (height * handleFrac).toInt().coerceIn(0, max(0, height - dp(SIDEBAR_HANDLE_H_DP)))
+    private fun isLandscape(): Boolean {
+        val bounds = wm?.currentWindowMetrics?.bounds ?: return false
+        return bounds.width() > bounds.height()
+    }
+
+    private fun loadEdgePos(manager: WindowManager) {
+        val pos = settings.edgePos(isSidebar = true, landscape = isLandscape())
+        ui.onEnd = pos.onEnd
+        handleFrac = pos.yFrac
+        updateAvailHeight(manager)
+    }
+
+    private fun updateAvailHeight(manager: WindowManager) {
+        val insets = systemInsets(manager)
+        val usablePx = manager.currentWindowMetrics.bounds.height() - insets.top - insets.bottom
+        ui.availHeightDp = max(0, (usablePx / density).toInt() - 16)
     }
 
     private fun dp(value: Int): Int = (value * density).toInt()
@@ -297,6 +338,7 @@ private fun SidebarRoot(state: SidebarUiState, actions: SidebarActions) {
         SidebarHandle(accent = accent, onEnd = state.onEnd)
         return
     }
+    LaunchedEffect(Unit) { GameTools.syncRecording(context) }
     val apps by store.sidebarApps.collectAsState()
     val recording by GameTools.recording.collectAsState()
     val flyout = state.flyout
@@ -304,9 +346,9 @@ private fun SidebarRoot(state: SidebarUiState, actions: SidebarActions) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        if (state.onEnd && flyout != null) Flyout(flyout, state.shortcuts, accent, actions)
-        Rail(apps, flyout, recording, accent, actions)
-        if (!state.onEnd && flyout != null) Flyout(flyout, state.shortcuts, accent, actions)
+        if (state.onEnd && flyout != null) Flyout(flyout, state.shortcuts, state.availHeightDp, accent, actions)
+        Rail(apps, flyout, recording, state.availHeightDp, accent, actions)
+        if (!state.onEnd && flyout != null) Flyout(flyout, state.shortcuts, state.availHeightDp, accent, actions)
     }
 }
 
@@ -316,6 +358,7 @@ private fun Rail(
     apps: List<String>,
     flyout: String?,
     recording: Boolean,
+    availHeightDp: Int,
     accent: Color,
     actions: SidebarActions
 ) {
@@ -337,9 +380,10 @@ private fun Rail(
                 )
             }
         }
+        val listMaxDp = minOf(APP_LIST_MAX_DP, max(88, availHeightDp - 176))
         Column(
             modifier = Modifier
-                .heightIn(max = APP_LIST_MAX_DP.dp)
+                .heightIn(max = listMaxDp.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -418,7 +462,13 @@ private fun SidebarHandle(accent: Color, onEnd: Boolean) {
 }
 
 @Composable
-private fun Flyout(pkg: String, shortcuts: List<AppShortcut>?, accent: Color, actions: SidebarActions) {
+private fun Flyout(
+    pkg: String,
+    shortcuts: List<AppShortcut>?,
+    availHeightDp: Int,
+    accent: Color,
+    actions: SidebarActions
+) {
     val context = LocalContext.current
     val label = remember(pkg) {
         runCatching {
@@ -453,40 +503,46 @@ private fun Flyout(pkg: String, shortcuts: List<AppShortcut>?, accent: Color, ac
                 modifier = Modifier.weight(1f)
             )
         }
-        when {
-            shortcuts == null -> FlyoutNote("Lagi ngambil pintasan...")
-            shortcuts.isEmpty() -> FlyoutNote("App ini nggak punya pintasan")
-            else -> shortcuts.forEach { sc ->
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(Hairline)
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .clickable(role = Role.Button) { actions.onShortcut(sc) }
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    AppIcon(
-                        pkg = pkg,
+        Column(
+            modifier = Modifier
+                .heightIn(max = max(88, availHeightDp - 120).dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            when {
+                shortcuts == null -> FlyoutNote("Lagi ngambil pintasan...")
+                shortcuts.isEmpty() -> FlyoutNote("App ini nggak punya pintasan")
+                else -> shortcuts.forEach { sc ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(Hairline)
+                    )
+                    Row(
                         modifier = Modifier
-                            .size(24.dp)
-                            .clip(ChamferShape(5.dp))
-                    )
-                    Text(
-                        text = sc.label,
-                        color = TextPrimary,
-                        fontFamily = Saira,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 13.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .clickable(role = Role.Button) { actions.onShortcut(sc) }
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        AppIcon(
+                            pkg = pkg,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(ChamferShape(5.dp))
+                        )
+                        Text(
+                            text = sc.label,
+                            color = TextPrimary,
+                            fontFamily = Saira,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }

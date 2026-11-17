@@ -46,7 +46,7 @@ object Sidebar {
             val line = raw.trim()
             when {
                 line.startsWith("ShortcutInfo {") -> label = null
-                line.startsWith("shortLabel=") -> label = line.removePrefix("shortLabel=").substringBefore(", resId=")
+                line.startsWith("shortLabel=") -> label = line.removePrefix("shortLabel=").split(SHORT_LABEL_END, limit = 2)[0].trim()
                 line.startsWith("intents=[Intent {") -> {
                     val name = label?.takeIf { it != "null" } ?: continue
                     val command = parseIntent(line) ?: continue
@@ -60,20 +60,24 @@ object Sidebar {
     suspend fun openShortcut(shortcut: AppShortcut): Boolean = RootShell.run(shortcut.command) != null
 
     private fun parseIntent(line: String): String? {
-        val body = line.substringAfter("Intent { ").substringBefore(" }")
-        val parts = body.split(" ").associate { it.substringBefore("=") to it.substringAfter("=", "") }
-        val cmp = parts["cmp"] ?: return null
+        val body = line.substringAfter("Intent { ", "").substringBefore(" }")
+        if (body.isEmpty()) return null
+        val fields = INTENT_FIELD.findAll(body).associate { it.groupValues[1] to it.groupValues[2] }
+        val cmp = fields["cmp"] ?: return null
+        if ('\'' in cmp) return null
         val sb = StringBuilder("am start")
-        parts["act"]?.let { sb.append(" -a '").append(it).append('\'') }
-        parts["dat"]?.let { sb.append(" -d '").append(it).append('\'') }
-        parts["flg"]?.let { sb.append(" -f ").append(it) }
+        fields["act"]?.takeIf { '\'' !in it }?.let { sb.append(" -a '").append(it).append('\'') }
+        fields["dat"]?.takeIf { '\'' !in it }?.let { sb.append(" -d '").append(it).append('\'') }
+        fields["flg"]?.takeIf { '\'' !in it }?.let { sb.append(" -f ").append(it) }
         sb.append(" -n '").append(cmp).append('\'')
         val bundle = line.substringAfter("PersistableBundle[{", "").substringBefore("}]", "")
         if (bundle.isNotEmpty()) {
-            bundle.split(", ").forEach { pair ->
-                val key = pair.substringBefore("=")
-                val value = pair.substringAfter("=", "")
-                if (key.isEmpty() || '\'' in key || '\'' in value) return@forEach
+            bundle.split(BUNDLE_PAIR_SEP).forEach { pair ->
+                val eq = pair.indexOf('=')
+                if (eq <= 0) return@forEach
+                val key = pair.substring(0, eq)
+                val value = pair.substring(eq + 1)
+                if ('\'' in key || '\'' in value) return@forEach
                 val flag = when {
                     value == "true" || value == "false" -> "--ez"
                     value.toIntOrNull() != null -> "--ei"
@@ -87,4 +91,7 @@ object Sidebar {
     }
 
     private const val MAX_SHORTCUTS = 4
+    private val SHORT_LABEL_END = Regex(", (?:resPackage|resId)=")
+    private val INTENT_FIELD = Regex("""(?:^|\s)(act|dat|flg|cmp)=([^\s}]+)""")
+    private val BUNDLE_PAIR_SEP = Regex(""", (?=[A-Za-z0-9_.\-]+=)""")
 }

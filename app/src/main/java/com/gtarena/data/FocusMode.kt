@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.withLock
 
 object FocusMode {
     private const val DND_MARKER = "/data/adb/gtarena/dnd"
+    private const val BRIGHT_MARKER = "/data/adb/gtarena/bright_auto"
     private val mutex = Mutex()
     private val _enabled = MutableStateFlow(false)
     val enabled: StateFlow<Boolean> = _enabled
@@ -21,7 +22,10 @@ object FocusMode {
         prevZen = RootShell.run("settings get global zen_mode")?.trim()?.toIntOrNull()
         prevBrightnessMode = RootShell.run("settings get system screen_brightness_mode")?.trim()?.toIntOrNull()
         if (prevZen == 0) RootShell.run("cmd notification set_dnd priority && mkdir -p /data/adb/gtarena && touch $DND_MARKER")
-        if (prevBrightnessMode == 1) RootShell.run("settings put system screen_brightness_mode 0")
+        if (prevBrightnessMode == 1) {
+            RootShell.run("settings put system screen_brightness_mode 0 && mkdir -p /data/adb/gtarena && touch $BRIGHT_MARKER")
+        }
+        _brightnessLocked.value = true
         RootShell.run("am kill-all")
         _enabled.value = true
     }
@@ -29,7 +33,8 @@ object FocusMode {
     suspend fun disable() = mutex.withLock {
         if (!_enabled.value) return@withLock
         if (prevZen == 0) RootShell.run("cmd notification set_dnd off; rm -f $DND_MARKER")
-        if (prevBrightnessMode == 1) RootShell.run("settings put system screen_brightness_mode 1")
+        if (prevBrightnessMode == 1) RootShell.run("settings put system screen_brightness_mode 1; rm -f $BRIGHT_MARKER")
+        refreshBrightnessLock()
         prevZen = null
         prevBrightnessMode = null
         _enabled.value = false
@@ -50,7 +55,10 @@ object FocusMode {
     }
 
     suspend fun recover() {
-        RootShell.run("if [ -f $DND_MARKER ]; then cmd notification set_dnd off; rm -f $DND_MARKER; fi")
+        RootShell.run(
+            "if [ -f $DND_MARKER ]; then cmd notification set_dnd off; rm -f $DND_MARKER; fi; " +
+                "if [ -f $BRIGHT_MARKER ]; then settings put system screen_brightness_mode 1; rm -f $BRIGHT_MARKER; fi"
+        )
     }
 
     suspend fun cleanRam(): Int {

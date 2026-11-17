@@ -15,6 +15,8 @@ data class GameConfig(
     val thermalLevel: Int = 0
 )
 
+data class EdgePos(val onEnd: Boolean, val yFrac: Float)
+
 class SettingsStore private constructor(context: Context) {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences("gtarena", Context.MODE_PRIVATE)
@@ -105,6 +107,31 @@ class SettingsStore private constructor(context: Context) {
 
     private fun bubbleKey(landscape: Boolean) = if (landscape) "bubble_pos_land" else "bubble_pos_port"
 
+    fun edgePos(isSidebar: Boolean, landscape: Boolean): EdgePos {
+        val defaultOnEnd = prefs.getBoolean(KEY_LAST_EDGE_ON_END, true)
+        val defaultFrac = if (isSidebar) 0.4f else 0.12f
+        val raw = prefs.getString(edgeKey(isSidebar, landscape), null)?.split(",")
+            ?: return EdgePos(defaultOnEnd, defaultFrac)
+        val onEnd = raw.getOrNull(0)?.toBooleanStrictOrNull() ?: defaultOnEnd
+        val yFrac = raw.getOrNull(1)?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: defaultFrac
+        return EdgePos(onEnd, yFrac)
+    }
+
+    fun setEdgePos(isSidebar: Boolean, landscape: Boolean, onEnd: Boolean, yFrac: Float) {
+        val clamped = (if (yFrac.isFinite()) yFrac else 0f).coerceIn(0f, 1f)
+        prefs.edit()
+            .putString(edgeKey(isSidebar, landscape), "$onEnd,$clamped")
+            .putBoolean(KEY_LAST_EDGE_ON_END, onEnd)
+            .apply()
+    }
+
+    private fun edgeKey(isSidebar: Boolean, landscape: Boolean): String = when {
+        isSidebar && landscape -> KEY_SIDEBAR_POS_LAND
+        isSidebar -> KEY_SIDEBAR_POS_PORT
+        landscape -> KEY_OVERLAY_POS_LAND
+        else -> KEY_OVERLAY_POS_PORT
+    }
+
     fun setExtraGame(pkg: String, included: Boolean) {
         val next = if (included) _extraGames.value + pkg else _extraGames.value - pkg
         _extraGames.value = next
@@ -142,6 +169,11 @@ class SettingsStore private constructor(context: Context) {
         private const val GAME_PREFIX = "game:"
         private const val KEY_SIDEBAR = "sidebar_enabled"
         private const val KEY_SIDEBAR_APPS = "sidebar_apps"
+        private const val KEY_SIDEBAR_POS_PORT = "sidebar_pos_port"
+        private const val KEY_SIDEBAR_POS_LAND = "sidebar_pos_land"
+        private const val KEY_OVERLAY_POS_PORT = "overlay_pos_port"
+        private const val KEY_OVERLAY_POS_LAND = "overlay_pos_land"
+        private const val KEY_LAST_EDGE_ON_END = "last_edge_on_end"
 
         @Volatile
         private var instance: SettingsStore? = null

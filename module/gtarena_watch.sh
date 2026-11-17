@@ -59,6 +59,10 @@ while true; do
                     cmd notification set_dnd off
                     rm -f $D/dnd
                 fi
+                if [ -f $D/bright_auto ]; then
+                    settings put system screen_brightness_mode 1
+                    rm -f $D/bright_auto
+                fi
                 rm -f $H $D/profile
                 echo "gtarena heartbeat stale -> seimbang uptime=$(cut -d' ' -f1 /proc/uptime)" >> $L
             fi

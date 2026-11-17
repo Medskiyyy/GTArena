@@ -5,10 +5,13 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -18,9 +21,11 @@ import com.gtarena.MainActivity
 import com.gtarena.R
 import com.gtarena.data.FocusMode
 import com.gtarena.data.ForegroundAppWatcher
+import com.gtarena.data.GameConfig
 import com.gtarena.data.GameRepository
 import com.gtarena.data.LaunchWatcher
 import com.gtarena.data.ProfileEngine
+import com.gtarena.data.RootShell
 import com.gtarena.data.SettingsStore
 import com.gtarena.model.Profile
 import com.gtarena.model.label
@@ -45,7 +50,16 @@ data class GameSession(
     val bypass: Boolean = false,
     val refreshHz: Int = 120,
     val crosshair: Boolean = false,
-    val thermal: Int = 0
+    val thermal: Int = 0,
+    val focus: Boolean = false,
+    val startedAt: Long = SystemClock.elapsedRealtime(),
+    val resumed: Boolean = false
+)
+
+private data class PausedSession(
+    val session: GameSession,
+    val pausedAt: Long,
+    val configSnapshot: GameConfig
 )
 
 class ArenaService : LifecycleService() {
@@ -56,15 +70,41 @@ class ArenaService : LifecycleService() {
     private val engineLock = Mutex()
     private val sessionLock = Mutex()
     private val games = HashMap<String, String>()
+    private val pkgChanges = MutableStateFlow(0)
+
+    @Volatile
+    private var pausedSession: PausedSession? = null
 
     @Volatile
     private var gamePkgs: Set<String> = emptySet()
 
+    private val pkgReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val pkg = intent?.data?.schemeSpecificPart
+            if (pkg != null) games.remove(pkg)
+            pkgChanges.value++
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         settings = SettingsStore.get(this)
-        controller = OverlayController(this, { switchProfile(it) }, { switchBypass(it) }, { switchRefresh(it) }, { switchThermal(it) })
+        controller = OverlayController(
+            this,
+            { switchProfile(it) },
+            { switchBypass(it) },
+            { switchRefresh(it) },
+            { switchThermal(it) },
+            { switchFocus(it) },
+            { switchCrosshair(it) }
+        )
         sidebar = SidebarController(this)
+        val pkgFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addDataScheme("package")
+        }
+        ContextCompat.registerReceiver(this, pkgReceiver, pkgFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
         _running.value = true
         controller.warmUp()
         createChannel()
@@ -113,7 +153,8 @@ class ArenaService : LifecycleService() {
             ForegroundAppWatcher.foregroundPackage().collect { handleForeground(it) }
         }
         lifecycleScope.launch {
-            combine(settings.extraGames, settings.autoApply) { _, auto -> auto }.collect { auto ->
+            combine(settings.extraGames, settings.autoApply, pkgChanges) { _, auto, _ -> auto }.collect { auto ->
+                if (!auto) pausedSession = null
                 val pkgs = if (auto) GameRepository(this@ArenaService).installedGames().map { it.pkg } else emptyList()
                 gamePkgs = pkgs.toSet()
                 ProfileEngine.writeGames(pkgs)
@@ -137,10 +178,18 @@ class ArenaService : LifecycleService() {
         return START_STICKY
     }
 
+    private fun canResumePaused(game: String): Boolean {
+        val paused = pausedSession ?: return false
+        return paused.session.pkg == game &&
+            SystemClock.elapsedRealtime() - paused.pausedAt <= SESSION_GRACE_MS &&
+            settings.gameConfig(game) == paused.configSnapshot
+    }
+
     private fun announce(game: String) {
-        controller.splash(game, settings.gameConfig(game).profile)
+        val resuming = canResumePaused(game)
+        if (!resuming) controller.splash(game, settings.gameConfig(game).profile)
         lifecycleScope.launch {
-            delay(SPLASH_HEAD_START_MS)
+            if (!resuming) delay(SPLASH_HEAD_START_MS)
             handleForeground(game)
             delay(CONFIRM_MS)
             val top = ForegroundAppWatcher.current()
@@ -149,6 +198,10 @@ class ArenaService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        try {
+            unregisterReceiver(pkgReceiver)
+        } catch (_: Exception) {
+        }
         controller.hide()
         sidebar.hide()
         _session.value = null
@@ -175,16 +228,52 @@ class ArenaService : LifecycleService() {
         val current = _session.value
         if (current?.pkg == pkg) return@withLock
         if (current != null) endSession()
-        if (!settings.autoApply.value) return@withLock
+        if (!settings.autoApply.value) {
+            pausedSession = null
+            return@withLock
+        }
         val label = gameLabel(pkg) ?: return@withLock
-        val cfg = settings.gameConfig(pkg)
-        _session.value = GameSession(pkg, label, cfg.profile, cfg.bypassCharge, cfg.refreshHz, cfg.crosshair, cfg.thermalLevel)
         closeUi()
-        applyLocked(cfg.profile, cfg.refreshHz, cfg.bypassCharge, cfg.thermalLevel)
-        if (cfg.focus) FocusMode.enable()
+        val now = SystemClock.elapsedRealtime()
+        val paused = pausedSession
+        pausedSession = null
+        val cfg = settings.gameConfig(pkg)
+        val resumed = if (
+            paused != null &&
+            paused.session.pkg == pkg &&
+            now - paused.pausedAt <= SESSION_GRACE_MS &&
+            cfg == paused.configSnapshot &&
+            RootShell.run("pidof '$pkg'") != null
+        ) {
+            paused.session.copy(
+                startedAt = paused.session.startedAt + (now - paused.pausedAt),
+                resumed = true
+            )
+        } else {
+            GameSession(
+                pkg = pkg,
+                label = label,
+                profile = cfg.profile,
+                bypass = cfg.bypassCharge,
+                refreshHz = cfg.refreshHz,
+                crosshair = cfg.crosshair,
+                thermal = cfg.thermalLevel,
+                focus = cfg.focus,
+                startedAt = now
+            )
+        }
+        _session.value = resumed
+        applyLocked(resumed.profile, resumed.refreshHz, resumed.bypass, resumed.thermal)
+        if (resumed.focus) FocusMode.enable()
     }
 
     private suspend fun endSession() {
+        val current = _session.value ?: return
+        pausedSession = if (settings.autoApply.value) {
+            PausedSession(current, SystemClock.elapsedRealtime(), settings.gameConfig(current.pkg))
+        } else {
+            null
+        }
         _session.value = null
         FocusMode.disable()
         applyLocked(settings.profile.value, null)
@@ -192,33 +281,60 @@ class ArenaService : LifecycleService() {
 
     private fun switchProfile(profile: Profile) {
         lifecycleScope.launch {
-            val s = _session.value ?: return@launch
-            _session.value = s.copy(profile = profile)
-            applyLocked(profile, s.refreshHz, s.bypass, s.thermal)
+            sessionLock.withLock {
+                val s = _session.value ?: return@withLock
+                _session.value = s.copy(profile = profile)
+                applyLocked(profile, s.refreshHz, s.bypass, s.thermal)
+            }
         }
     }
 
     private fun switchBypass(on: Boolean) {
         lifecycleScope.launch {
-            val s = _session.value ?: return@launch
-            _session.value = s.copy(bypass = on)
-            applyLocked(s.profile, s.refreshHz, on, s.thermal)
+            sessionLock.withLock {
+                val s = _session.value ?: return@withLock
+                _session.value = s.copy(bypass = on)
+                applyLocked(s.profile, s.refreshHz, on, s.thermal)
+            }
         }
     }
 
     private fun switchRefresh(hz: Int) {
         lifecycleScope.launch {
-            val s = _session.value ?: return@launch
-            _session.value = s.copy(refreshHz = hz)
-            applyLocked(s.profile, hz, s.bypass, s.thermal)
+            sessionLock.withLock {
+                val s = _session.value ?: return@withLock
+                _session.value = s.copy(refreshHz = hz)
+                applyLocked(s.profile, hz, s.bypass, s.thermal)
+            }
         }
     }
 
     private fun switchThermal(level: Int) {
         lifecycleScope.launch {
-            val s = _session.value ?: return@launch
-            _session.value = s.copy(thermal = level)
-            applyLocked(s.profile, s.refreshHz, s.bypass, level)
+            sessionLock.withLock {
+                val s = _session.value ?: return@withLock
+                _session.value = s.copy(thermal = level)
+                applyLocked(s.profile, s.refreshHz, s.bypass, level)
+            }
+        }
+    }
+
+    private fun switchFocus(on: Boolean) {
+        lifecycleScope.launch {
+            sessionLock.withLock {
+                val s = _session.value ?: return@withLock
+                _session.value = s.copy(focus = on)
+                if (on) FocusMode.enable() else FocusMode.disable()
+            }
+        }
+    }
+
+    private fun switchCrosshair(on: Boolean) {
+        lifecycleScope.launch {
+            sessionLock.withLock {
+                val s = _session.value ?: return@withLock
+                _session.value = s.copy(crosshair = on)
+            }
         }
     }
 
@@ -275,6 +391,7 @@ class ArenaService : LifecycleService() {
         private const val HEARTBEAT_MS = 10_000L
         private const val CONFIRM_MS = 4_000L
         private const val SPLASH_HEAD_START_MS = 450L
+        private const val SESSION_GRACE_MS = 180_000L
         private val THERMAL_GUARD_C = intArrayOf(0, 46, 50)
         private val IGNORED = setOf("com.android.systemui", "android")
 
